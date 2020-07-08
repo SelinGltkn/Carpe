@@ -1,0 +1,1155 @@
+---
+title: "Bilgisayar4-FinalOdevi"
+author: "Selin Nur Gültekin"
+date: "01 07 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## __Verinin kaynagı:__
+
+https://pokemondb.net/pokedex
+
+https://www.kaggle.com/abcsds/pokemon
+
+Bu, bir saldirinin oyunlarda ne kadar hasar verecegini hesaplamak icin kullanilan ozelliklerdir. Bu veri seti pokemon oyunlariyla ilgilidir (pokemon kartlari veya Pokemon Go DEGİL).
+
+__Pokemon istatistikleri hakkinda__
+
+  Her Pokemonun bir dizi istatistikleri vardir. HP (İsabet Puanlari) bir Pokemon'un yasam gucudur. Pokemon'unuzun HP sifira vurursa, bayilir ve savasta artık kullanilamaz (yine de Gizli Makineleri kullanabilir). Hız, stat Pokemon savasta ilk hamleyi yapacak karari verir. Bu stat uzun savaslarda kritik olabilir.
+
+  Saldiri ve Ozel Saldiri, Pokemonunuz tarafindan kullanilan hamlelerin gucunu olcer; bu ne kadar yuksek olursa, rakiplere o kadar cok hasar verirsiniz. Saldiri, Fiziksel kategorisindeki hareketlere karsilik gelirken Ozel Saldiri, Ozel hareketlere karsilik gelir.
+
+  Benzer sekilde, Savunma ve Ozel Savunma diger Pokemonlardan saldiri alma yetenegini olcer; stat ne kadar yuksek olursa, saldiri sirasinda o kadar az İsabet Puani kaybedilir. Savunma Fiziksel kategorisindeki hamlelere, Ozel Savunma ise Pzel hamlelere karsilik gelir.
+
+
+```{r pressure, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("pokemontim.jpg")
+```
+
+##__Degiskenler:__
+
+* X. : Her pokemon icin kimlik
+
+* Name = isim : Her pokemonun adi
+
+* Type 1 = tip1 : Her pokemonun bir tipi vardır, bu saldirilara karşı zayifligi / direnci belirler
+
+* Type 2 = tip2 : Bazi pokemonlar cift tiptir ve 2 turu de icerebilir.
+
+* Total = toplam : Tum istatistiklerin toplami, bir pokemonun ne kadar guclu olduguna dair genel bir rehber
+
+* HP = HP : İsabet puanlari veya saglik, bir pokemonun bayilmadan once ne kadar zarar verebilecegini tanimlar
+
+* Attack = saldiri : normal saldirilar icin temel degistirici (Ornegin Scratch, Punch)
+
+* Defense = savunma : normal saldirilara karsı temel hasar direnci
+
+* SP Atk = sp_atk : Ozel saldiri, ozel saldirilar icin temel degistirici (Orn. Yangin patlamasi, kabarcik demeti)
+
+* SP Def = sp_def : Ozel saldirilara karsi temel hasar direnci
+
+* Speed = hiz : Her turda pokemon icin saldiri hizini belirler
+
+* Generation  = nesil
+
+* Legendary = efsanevi 
+
+
+__İcerik:__ 
+
+1-Veri Yuklenmesi
+  
+2-Veri Analizi
+
+  2.1.Türler
+  
+  2.2.Degiskeler icin Grafikler
+  
+   -Histogram Grafikleri
+   -Yogunluk Grafikleri
+   -Kutu Grafikleri
+   -Cizgi Grafikleri
+   
+  2.3.En İyiler icin sonuc Grafikleri
+  
+  2.4.Nesiller
+  
+  2.5.Efsanevi
+ 
+3-Diger Grafikler
+
+  -Sacilim
+  -Etiketli sacilim
+  -Histogram
+  -Violin
+  -Pie Chart
+  -Cizgi
+  -3D
+  
+4-Regresyon Modeli
+
+5-Korelasyon 1
+
+6-Mega Pokemonlar
+
+7-Korelasyon 2
+
+8-Sonuclar ve Aciklamalar
+
+__1- Veri Yuklenmesi__
+
+```{r kutuphane, message=FALSE, warning=FALSE}
+# Gerekli kutuphaneler
+library(ggplot2) #Grafik olusturmak icin kullandim.
+library(dplyr) #Donusturme icin kullandim.
+library(tidyverse) #Veri duzenleme, goruntuleme gibi ihtiyaclar icin kullandim.
+library(summarytools) #Ozetlme islevi icin kullandim.
+library(tibble) #Veri duzenlme icin kullandim.
+library(gridExtra) #Grafikler icin kullandim.
+library(viridis) #Grafikleri renklendirme amacli kullandim.
+library(magick) # Gorsel icin resmi ekleme de kullandim.
+library(ggimage)#Grafige resim eklerken kullandiklarim ve bazi hatalardan dolayi eklemek durumunda kaldiklarim.
+library(raster) 
+library(reshape2)
+library(grid)
+library(igraph)
+library(ggraph)
+library(plotly) #plotly tablolari icin kullandim.
+library(tidyverse) #Verileri yeniden sekillendirmek icin kullandim.
+library(data.table) #veri cerceveleri olusturmak icin kullandim.
+library(scales) # Rekleri gostermesi icin kullandim.
+library(ggrepel) # grafik oluskurmak icin (etiketler) kullandim.
+library(naniar) # Eksik veri olup olmadigini kontrol etmek icin kullandim.
+library(highcharter) #Grafikler icin kullandim.
+library(GGally) #ikili korelasyon matrisi grafigi için ggplot2'yi genisletmek de kullandim.
+```
+
+```{r renk}
+#Grafiklerde kullanmak icin renk belirledim.
+colorsEarth <- c("#DA4511", "#FFBD00", "#6A953F", "#9A6233", "#D3AE7C", "#307CA1")
+colorsPastels <- c("#FA6E4F", "#F2CF59", "#FB8E7E", "#C5D7C0", "#8EC9BB", "#F8CA9D")
+colorsRainbow <- c("#FF8EC8", "#FFDF51", "#46DBDF", "#FF8F46", "#42BAB7", "#DB0000")
+colour_list <- c('#5CFFA5', '#AE5CFF', '#29FF89', '#9529FF', '#18B3CB', '#30CEE6', 'grey25')
+```
+
+```{r veri}
+# Verinin yuklenmesi
+pokemon <- read.csv("C:/Users/gulte/Desktop/Pokemon.csv")
+str(pokemon)
+summary(pokemon)
+```
+
+```{r duzen}
+# degisken duzenleme
+pokemon$Generation <- as.factor(pokemon$Generation)
+```
+
+ X. sutununda yinelenen sayilar oldugunu goruyoruz. Bu satirlar Mega Evrimler veya ayni Pokemon'un farkli versiyonlarina karsilik gelir.
+
+```{r isim düzenleme}
+pokemon <- pokemon %>% rename(isim = Name)
+pokemon <- pokemon %>% rename(tip1 = Type.1)
+pokemon <- pokemon %>% rename(tip2 = Type.2)
+pokemon <- pokemon %>% rename(toplam = Total)
+pokemon <- pokemon %>% rename(saldiri = Attack)
+pokemon <- pokemon %>% rename(savunma = Defense)
+pokemon <- pokemon %>% rename(sp_atk = Sp..Atk)
+pokemon <- pokemon %>% rename(sp_def = Sp..Def)
+pokemon <- pokemon %>% rename(hiz = Speed)
+pokemon <- pokemon %>% rename(nesil = Generation)
+pokemon <- pokemon %>% rename(efsanevi = Legendary)
+
+summary(pokemon)
+```
+
+```{r 10}
+# İlk 10 satir
+head(pokemon, 10)
+```
+
+
+```{r dim}
+dim(pokemon)
+```
+
+```{r table}
+table(pokemon$tip1)
+```
+
+```{r matrix}
+pokemon[c(1,3,6), 2]
+```
+
+ Bulbasaur ve Venusaur'un ozelliklerinin en sira disi kombinasyonuna sahip olan evrimlesme! Charmeleon a evrimlesmesi en sira disi olani olur. 
+
+ Degisken isimlerini turkcelestirdikten sonra ilk 10 satir inceledim. Satir sutun gozlemledim. Tip1 icin tabloyu olusturdum. Matrixle evrimlesme kombinasyonu olusturdum.
+
+__2- Veri Analizi__
+
+  __# 2.1. Türler__
+ 
+ Once farklı Pokemon turlerini gorelim.
+
+```{r tip1}
+# Tip1
+levels(pokemon$tip1)
+```
+
+```{r tip2}
+# Tip2
+levels(pokemon$tip2)
+```
+
+ Bir Pokemonun bir yada iki tipi olabilir. Sadece bir tip Pokemon için tip2 sütununda bos degerimiz var.
+
+```{r bar1}
+# Her bir tip1 icin kac tane Pokemon var?
+ggplot(pokemon, aes(x=fct_infreq(tip1))) + 
+  geom_bar(fill="#00CCCC", colour="black") +
+  labs(x="Tip1", y="Frequency",
+       title="Tip1 icin sıklık tablosu") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=90, hjust=1, vjust = 0.5))
+
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/bulbasaur.jpg") 
+grid.raster(image, x=0.79, y=0.7, height=0.35)
+```
+
+```{r bar2}
+# Her bir tip2 icin kac tane Pokemon var?
+ggplot(pokemon, aes(x=fct_infreq(tip2))) +
+  geom_bar(fill="#CC6600", colour="black") +
+  labs(x="Tip2", y="Frequency",
+       title="Tip2 icin sıklık tablosu") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/pidgey.jpg") 
+grid.raster(image, x=0.8, y=0.7, height=0.45)
+```
+
+ Gordugumuz gibi, cogu Pokemon'un sadece bir turu var. Her bir tip kombinasyonu icin Pokemon sayisini hesaplayalim. İlgili degiskenlerin seviyelerinin, her bir kombinasyonunun sayilarini iceren bir olasilik tablosu olusturabiliriz.
+
+```{r kombinasyon}
+# Her tip icin kombinasyon olusturalim
+types <- pokemon %>%
+  group_by(tip1, tip2) %>%
+  summarise(count=n()) 
+
+# Type.1 ve Type.2'nin beklenmedik durum tablosu
+ggplot(types, aes(x=tip1,y=tip2)) +
+  geom_tile(aes(fill=count), show.legend=FALSE) +
+  geom_text(aes(label=count)) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x="Tip 1", y="Tip 2",
+       title="Her tür kombinasyonu için Pokemon sayısı") +   
+  scale_fill_gradient(low="white", high="red") 
+```
+
+ Son sira bir tur Pokemon'a karşılık gelir. Ornegin, 27 saf Elektrik tipi Pokemon vardir.
+
+
+  __# 2.2. Degiskenler icin Grafikler__
+ 
+  İstatistiklerin dagilimini temsil etmek icin bazi basit histogramlarla baslayalim.
+  
+```{r hist}
+# HP Histogrami
+a1 <- ggplot(pokemon, aes(x=HP)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="HP", y="Frequency") +
+  theme_bw()
+
+# Saldiri Histogrami
+a2 <- ggplot(pokemon, aes(x=saldiri)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Saldiri", y="Frequency") +
+  theme_bw()
+
+# Savunma Histogrami
+a3 <- ggplot(pokemon, aes(x=savunma)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Savunma", y="Frequency") +
+  theme_bw()
+
+# Ozel saldiri Histogrami
+a4 <- ggplot(pokemon, aes(x=sp_atk)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Ozel Saldiri", y="Frequency") +
+  theme_bw()
+
+# Ozel savunma Histogrami
+a5 <- ggplot(pokemon, aes(x=sp_def)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Özel Savunma", y="Frequency") +
+  theme_bw()
+
+# Hiz Histogrami
+a6 <- ggplot(pokemon, aes(x=hiz)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Hiz", y="Frequency") +
+  theme_bw()
+
+# Toplam Histogrami
+a7 <- ggplot(pokemon, aes(x=toplam)) +
+  geom_histogram(binwidth=4, fill="palegreen", colour="black") + 
+  labs(x="Toplam", y="Frequency") +
+  theme_bw()
+
+# Tüm histogramlari iceren alt grafik
+grid.arrange(a1, a2, a3, a4, a5, a6, a7,
+             layout_matrix=cbind(c(1,4,7), c(2,5,7), c(3,6,7)))
+```
+
+  Efsanevi Pokemon normal olanlardan cok daha mi iyi? İstatistikleri arasindaki farki gormek icin yogunluk grafiklerini karsilastirabiliriz.
+
+```{r yogunluk}
+# HP yogunluk grafigi
+a8 <- ggplot(pokemon, aes(x=HP, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="HP", y="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Saldiri yogunluk grafigi
+a9 <- ggplot(pokemon, aes(x=saldiri, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="Saldiri", y="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Savunma yogunluk grafigi
+a10 <- ggplot(pokemon, aes(x=savunma, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="Savunma", y="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Ozel saldiri yogunluk grafigi
+a11 <- ggplot(pokemon, aes(x=sp_atk, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="Ozel saldiri", y="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Ozel savunma yogunluk grafigi
+a12 <- ggplot(pokemon, aes(x=sp_def, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="Ozel savunma", y="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Hiz yogunluk grafigi
+a13 <- ggplot(pokemon, aes(x=hiz, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  labs(x="Hiz", y ="Yogunluk") +
+  theme_bw() +
+  theme(legend.position="none")
+
+# Toplam yogunluk grafigi
+a14 <- ggplot(pokemon, aes(x=toplam, fill=efsanevi)) +
+  geom_density(alpha=0.5) +
+  theme_bw() +
+  labs(x="Toplam", y="Yogunluk") 
+
+# Tum yogunluk grafiklerine ait alt grafik
+grid.arrange(a8, a9, a10, a11, a12, a13, a14,
+             layout_matrix=cbind(c(1,4,7), c(2,5,7), c(3,6,7)))
+```
+
+ Efsanevi Pokemon'un daha buyuk istatistiklere sahip oldugu aciktir. Pokemon’un turune gore istatistiksel dagılımı görmek icin kutu grafiklerini gorsellestirelim.
+
+```{r kutu1}
+# HP icin kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(HP)),
+       aes(x=reorder(tip1, HP, FUN=median), y=HP)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="HP Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+ 
+```{r kutu2}
+# Saldiri icin kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(saldiri)),
+       aes(x=reorder(tip1, saldiri, FUN=median), y=saldiri)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Saldiri Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+
+```{r kutu3}
+# Savunma kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(savunma)),
+       aes(x=reorder(tip1, savunma, FUN=median), y=savunma)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Savunma Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+
+```{r kutu4}
+# Ozel saldiri kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(sp_atk)),
+       aes(x=reorder(tip1, sp_atk, FUN=median), y=sp_atk)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Ozel Saldiri Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+
+```{r kutu5}
+# Ozel savunma kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(sp_def)),
+       aes(x=reorder(tip1, sp_def, FUN=median), y=sp_def)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Ozel Savunma Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+```{r kutu6}
+# Hiz kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(hiz)),
+       aes(x=reorder(tip1, hiz, FUN=median), y=hiz)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Hiz Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+
+```{r kutu7}
+# Toplam icin kutu grafigi
+ggplot(pokemon %>% group_by(tip1) %>% mutate(med=median(toplam)),
+       aes(x=reorder(tip1, toplam, FUN=median), y=toplam)) +
+  geom_boxplot(aes(fill=med)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="Tip 1",
+       title="Toplam Kutu Grafigi") +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+ Kutu grafiklerindeki aykiri degerler, verilerin geri kalanindan sayisal olarak uzaklasan etkileyici istatistiklere sahip Pokemon'a (Efsanevi veya Mega Evrim) karsılık gelir. 
+
+```{r tyogunluk}
+# Toplam yogunluk grafigi
+ ggplot(pokemon, aes(x=toplam)) +
+   geom_density(alpha=0.5, aes(fill=tip1)) +
+   facet_wrap(~tip1) + 
+   labs(x="toplam", y="Yogunluk", title = "Toplam Yogunluk Grafi") +
+   theme_bw() +
+   theme(axis.text.x=element_blank(), 
+         axis.ticks.x=element_blank(),
+         legend.position="none")
+```
+
+ Kutu grafiklerini ve yogunluk grafiklerini inceleyerek, Dragon tipi Pokemon'un digerlerinden istatistiksel olarak daha ustun oldugunu soyleyebiliriz. 
+ 
+ Hangi nesilde istatistikler daha iyidir?
+
+```{r nesilt}
+# Her nesil için Ortalama Toplam
+pokemon %>%
+  group_by(nesil) %>%
+  summarize(toplam=mean(toplam)) %>%
+  ggplot(aes(x=nesil, y=toplam, group=1)) +
+    geom_line(colour="red") +
+    geom_point() +
+    labs(y="Ortalama Toplam",
+         title="Her nesil için Ortalama Toplam") +
+    theme_bw() 
+```
+
+ Dorduncu nesil, muhtemelen daha Efsanevi Pokemon'lu nesil olduğu icin en iyi ortalama istatistiklere sahiptir. 
+ 
+ Degerlere karsilik gelen nesil ortalama istatistiklerine bakicak olursak:
+
+```{r onesil}
+#Her neslin ortalama istatistikleri
+pokemon %>%
+  group_by(nesil) %>%
+  summarize(HP=mean(HP),
+            saldiri=mean(saldiri),
+            savunma=mean(savunma),
+            sp_atk=mean(sp_atk),
+            sp_def=mean(sp_def),
+            hiz=mean(hiz)) %>%
+  gather(Stats, value, 2:7) %>%
+  ggplot(aes(x=nesil, y=value, group=1)) +
+    geom_line(colour="red") +
+    geom_point() +
+    facet_wrap(~Stats) +
+    labs(y="Ortalama İstatistikler") +
+    theme_bw() 
+```
+
+   __# 2.4. En İyiler icin Sonuc Grafikleri__
+
+```{r hp1}
+# En İyi 10 HP Pokemon
+pokemon %>%
+ dplyr::select(isim, HP) %>%
+  arrange(desc(HP)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, HP), y=HP)) +
+  geom_bar(stat="identity", aes(fill=HP), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=HP)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="En İyi 10 HP Pokemon") +
+  theme_bw() 
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/blissey.jpg") 
+grid.raster(image, x=0.85, y=0.3, height=0.25)
+```
+
+```{r atk1}
+# Top 10 Saldiri Pokemon
+pokemon %>%
+ dplyr::select(isim, saldiri) %>%
+  arrange(desc(saldiri)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, saldiri), y=saldiri)) +
+  geom_bar(stat="identity", aes(fill=saldiri), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=saldiri)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="Top 10 Saldiri Pokemon") +
+  theme_bw() 
+
+```
+
+```{r def1}
+# Top 10 Savunma Pokemon
+pokemon %>%
+  dplyr::select(isim, savunma) %>%
+  arrange(desc(savunma)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, savunma), y=savunma)) +
+  geom_bar(stat="identity", aes(fill=savunma), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=savunma)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="Top 10 Savunma Pokemon") +
+  theme_bw() 
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/Steelix.png") 
+grid.raster(image, x=0.91, y=0.25, height=0.3)
+```
+
+```{r spatk1}
+# Top 10 Ozel Saldiri Pokemon
+pokemon %>%
+  dplyr::select(isim, sp_atk) %>%
+  arrange(desc(sp_atk)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, sp_atk), y=sp_atk)) +
+  geom_bar(stat="identity", aes(fill=sp_atk), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=sp_atk)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="Top 10 Ozel Saldiri Pokemon") +
+  theme_bw() 
+```
+
+```{r spdef1}
+# Top 10 Ozel Savunma Pokemon
+pokemon %>%
+ dplyr::select(isim, sp_def) %>%
+  arrange(desc(sp_def)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, sp_def), y=sp_def)) +
+  geom_bar(stat="identity", aes(fill=sp_def), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=sp_def)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="Top 10 Ozel Savunma Pokemon") +
+  theme_bw() 
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/Shuckle.png") 
+grid.raster(image, x=0.86, y=0.28, height=0.3)
+```
+
+```{r hiz1}
+# En İyi 10 Hizli Pokemon
+pokemon %>%
+ dplyr::select(isim, hiz) %>%
+  arrange(desc(hiz)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, hiz), y=hiz)) +
+  geom_bar(stat="identity", aes(fill=hiz), colour="black", show.legend=FALSE) +
+  geom_label(aes(label=hiz)) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  coord_flip() +
+  labs(x="İsim", title="En İyi 10 Hizli Pokemon") +
+  theme_bw() 
+
+# Tabloya resim ekleyelim
+image <- image_read("C:/Users/gulte/Desktop/Deoxys-Speed.png") 
+grid.raster(image, x=0.92, y=0.28, height=0.28)
+```
+
+```{r tplm1}
+# Top 10 Toplam Pokemon
+pokemon %>%
+  dplyr::select(isim, toplam) %>%
+  arrange(desc(toplam)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(isim, toplam), y=toplam)) +
+  geom_bar(stat="identity", aes(fill=toplam), colour="black", show.legend=FALSE) +
+  scale_fill_gradient(low="paleturquoise", high="paleturquoise4") +
+  geom_label(aes(label=toplam)) +
+  coord_flip() +
+  labs(x="İsim", title="Top 10 Toplam Pokemon") +
+  theme_bw() 
+```
+
+ plot_ly() ile en iyileri gozlemleyelim;
+
+
+```{r p1}
+#Savunma-Ozel savunma
+plot_ly(data = pokemon
+        ,type = 'scatter'
+        ,mode='markers'
+        ,hoverinfo = 'text'
+        ,x = ~pokemon$savunma
+        ,y = ~pokemon$sp_def
+        ,color = ~pokemon$tip1
+        ,colors = c('Yellow','Red','Green','Blue')
+        ,text = ~paste("isim:", isim, "Tip : ", tip1,
+                        " savunma : ",  savunma,
+                        " Sp Def:", sp_def))%>% 
+  layout(title = "En İyi Savunma Pokemonu"
+         , xaxis = list(title ="savunma")
+         , yaxis = list(title = "Ozel savunma"))%>%
+  add_segments(pokemon, x=70, y=0, xend=70, yend=130, line=list(color="red", width = 1))%>%
+  add_segments(pokemon, x=0, y=67, xend=180, yend=67, line=list(color="red", width = 1))
+```
+
+
+MewtwoMega Mewtwo Y guclu saldiri vr sp atk a sahip;
+```{r g1}
+pokemon[which(pokemon$isim == "MewtwoMega Mewtwo Y"),]
+```
+
+
+
+ Saldırgan Pokemon Türleri :
+Ozel Saldiriya Karsi Saldirinin dagilimi; cogunlukla yangin pokemonlari saldirgandir. 1. ceyrege bakarsaniz, ated pokemonunun guclu saldiri istatistiklerine sahip oldugunu gorebiliriz.
+
+```{r p2}
+plot_ly(data = pokemon
+        ,type = 'scatter'
+        ,mode='markers'
+        ,hoverinfo = 'text'
+        ,x= ~pokemon$saldiri
+        ,y = ~pokemon$sp_atk
+        ,color = ~pokemon$tip1
+        ,colors = c('Yellow','Red','Green','Blue')
+        ,text = ~paste("İsim:", isim, "Tip : ", tip1,
+                       " saldiri : ",  saldiri,
+                       " Sp Atk:", sp_atk))%>% 
+  layout(title = "En İyi Saldiri Pokemon"
+         , xaxis = list(title ="saldiri")
+         , yaxis = list(title = "Ozel Saldiri"))%>%
+  add_segments(pokemon, x=80, y=0, xend=80, yend=130, line=list(color="red", width = 1))%>%
+  add_segments(pokemon, x=0, y=73, xend=130, yend=73, line=list(color="red", width = 1))
+```
+
+
+ En Hızlı Pokemon Türü:
+```{r p3}
+plot_ly(data = pokemon
+        ,type = 'scatter'
+        ,mode='markers'
+        ,hoverinfo = 'text'
+        ,x= ~pokemon$toplam
+        ,y = ~pokemon$hiz
+        ,color = ~pokemon$tip1
+        ,colors = c('Orange','Red','Green','Blue')
+        ,text = ~paste("isim : ", isim, "Tip : ", tip1,
+                       " Toplam: ",  toplam,
+                       " Hiz:", hiz))%>% 
+  layout(title = "En hizli Pokemon"
+         , xaxis = list(xaxis=70 , title ="Toplam")
+         , yaxis = list(yaxis=70 , title = "hiz"))%>%
+  add_segments(pokemon, x=0, y=80, xend=600, yend=80, line=list(color="red", width = 1))
+```
+
+ Burada x toplam ve y ekseninde hiz olarak cizilir. Bunu yaparak Toplam İstatistiklerde hizin ne kadar faktor olarak yer aldigini anladim. Electric Pokemonlar en hizlisi, ardindan Ateş ve Su geliyor. Cim pokemonlari en yavas olanlardir. Abline (cizgi) uzerindeki her isarete bakarsaniz, Electric pokemon'un %80'inden fazlasinin daha iyi bir Hiz oranina sahip oldugunu gorebiliriz.
+
+ Hayatta Kalanlar
+ 
+1. Çeyreğe bakarsanız, Water(Su) Pokemonun daha fazla dayanikliliga sahip oldugunu gorebiliriz. Daha yuksek isabet puanları ve Ozel Savunma İstatistikleri vardir. Bunlar Grass(Cim) pokemonudur.
+
+```{r p5}
+plot_ly(data = pokemon
+        ,type = 'scatter'
+        ,mode='markers'
+        ,hoverinfo = 'text'
+        ,x= ~pokemon$HP
+        ,y = ~pokemon$sp_def
+        ,color = ~pokemon$tip1
+        ,colors = c('Orange','Red','Green','Blue')
+        ,text = ~paste("isim : ", isim, "Tip : ", tip1,
+                       " Ozel Savunma: ",  sp_def,
+                       " HP:", HP))%>% 
+  layout(title = "Survivor"
+         , xaxis = list(xaxis=70 , title ="HP")
+         , yaxis = list(yaxis=70 , title = "Ozel savunma"))%>%
+  add_segments(pokemon, x=70, y=0, xend=70, yend=130, line=list(color="red", width = 1))%>%
+  add_segments(pokemon, x=0, y=70, xend=130, yend=70, line=list(color="red", width = 1))
+```
+
+ __2.4. Nesiller__
+
+Her nesil icin kac Pokemon vardir?
+
+```{r n1}
+# Nesil başına Pokemon sayisi (Mega Evrimler dahil)
+pokemon %>%
+  count(nesil) %>%
+  ggplot(aes(x=nesil, y=n)) + 
+  geom_bar(stat="identity", fill="lavender", colour="black") +
+  geom_label(aes(label=n)) +
+  labs(x="Nesil", y="Pokemon Sayisi",
+       title="Nesil basina Pokemon sayisi") +
+  theme_bw() 
+```
+
+ En cok Pokemon ilk nesildir. Nesil basina her bir birincil turden kac tane Pokemon oldugunu belirtebilir miyiz?
+
+```{r n2}
+# Nesil basina tip1'in Pokemon sayisi
+ggplot(pokemon, aes(x=tip1, fill=nesil)) + 
+  geom_bar() +
+  labs(x="Nesli", y="Pokemon Sayisi",
+       title="Nesil basina tip1'in Pokemon sayisi") +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+Ve nesil basina her tip kombinasyon icin Pokemon sayisi nedir? Ornegin, ikinci nesilde kac tane Bug/Poison Pokemon var? Hesaplamak icin ftable () işlevini kullanabiliriz.
+
+```{r n3}
+# ftable cok buyuk! Yalnizca hata ile tur kombinasyonlarini birincil tur olarak gösteririz.
+ head(ftable(pokemon[, c("tip1", "tip2", "nesil")]), n=19)
+```
+
+HP & Saldiri Nesiller icin sacilim grafikleri
+```{r n4}
+ggplot(pokemon,aes(HP,saldiri))+geom_point(aes(color=HP))+facet_wrap(~nesil)+stat_smooth()
+```
+
+ __2.5. Efsanevi__
+ 
+Veri setimizde tüm Pokemonlarla ilgili kac Efsanevi Pokemon var?
+
+```{r }
+# Efsanevi Pokemon Sayilari
+table(pokemon$efsanevi)
+```
+
+
+```{r }
+pokemon %>% 
+  ggplot(aes(efsanevi)) + 
+  geom_bar(aes(fill = efsanevi, colour = efsanevi), size = 1) + 
+  geom_text(aes(label = percent(..count../nrow(pokemon))), stat = 'count', vjust = -0.5, colour = colour_list[7]) + 
+  scale_fill_manual(values = colour_list[1:2]) + 
+  scale_colour_manual(values = colour_list[3:4]) + 
+  labs(x = NULL, y = NULL, 
+       title = 'Efsanevi Pokemonlar', 
+       subtitle = 'Pokemonların sadece %8 i efsanedir.') + 
+  coord_cartesian(ylim = c(0, 800)) + 
+  theme(axis.title.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank())
+```
+
+ Sadece 65 Pokemon (% 8.8) Efsanevi! Hangi nesilde daha Efsanevi Pokemon var? Veya daha az? 
+
+```{r }
+# Nesil basina Efsanevi Pokemon Sayisi
+ggplot(pokemon, aes(x=nesil, fill=efsanevi)) + 
+  geom_bar(position="dodge") +
+  labs(x="Nesil", y="Pokemon Sayisi",
+       title="Nesil basina Efsanevi Pokemon Sayisi") +
+  theme_bw() 
+```
+
+
+ __3. Diger Grafikler__
+
+```{r }
+pokemon %>% 
+  ggplot(aes(x =savunma, y = saldiri)) +
+  geom_point(aes(color = as.factor(nesil), shape = efsanevi), size = 3, stroke = 1.5, alpha = 0.5) +
+  theme_classic() +
+  labs(x = "Savunma", y = "Saldiri", title = "Basit Plot", color = "Nesil", shape = "Efsanevi", subtitle = "Sacilim Grafigi") +
+  scale_color_manual(values = colorsEarth) +
+  scale_x_continuous(breaks = seq(0, 250, 25)) +
+  scale_y_continuous(breaks = seq(0, 200, 25))
+```
+
+
+```{r }
+pokemon %>% 
+  filter(efsanevi == "True") %>% 
+  arrange(desc(toplam)) %>% 
+  head(30) %>% 
+  mutate(nesil = as.factor(nesil)) %>% 
+  
+  ggplot(aes(x = HP, y = sp_atk)) +
+  geom_point(aes(color = nesil), size = 1.8) +
+  theme_bw() +
+  labs(x = "HP", y = "sp_atk", title = "Etiket Grafigi", color = "nesil",
+       subtitle = "Dagilim Grafigi") +
+  theme(panel.border = element_rect(color = "grey35")) +
+  geom_label_repel(aes(label = isim, color = nesil), size = 3) +
+  scale_color_manual(values = colorsEarth)
+```
+
+
+```{r }
+pokemon %>% 
+  filter(tip2 %in% c("Dragon", "Fighting", "Fairy", "Grass")) %>% 
+  ggplot(aes(x = toplam, fill = tip2)) +
+  geom_density(size = 0.8, alpha = 0.75) +
+  theme_light() + 
+  labs(x = "toplam", y = "Yogunluk", title = "Yogunluk Grafigi", subtitle = "Histogram", fill = "Pokemon Turu") +
+  scale_y_continuous(labels = scales::percent) +
+  scale_fill_manual(values = c(colorsPastels[2], colorsPastels[6], colorsPastels[5], colorsPastels[1]))
+```
+
+```{r }
+pokemon %>%
+  ggplot(aes(x = saldiri, y = savunma)) +
+  geom_violin(trim = F, size = 1.5, color = colorsRainbow[3]) +
+  geom_dotplot(binaxis = "y", stackdir = "center", color = colorsRainbow[4], fill = colorsRainbow[1],
+               bins = 10, binwidth = 3.5) +
+  theme_bw() + 
+  labs(x = "saldiri", y = "savunma", title = "Violin Grafigi") +
+  geom_segment(x = 50, y = 180, xend = 150, yend = 180, size = 2.5, color = colorsRainbow[2])
+```
+
+```{r }
+pokemon %>% 
+    filter(tip1 %in% c("Water", "Normal", "Grass", "Bug", "Psychic", "Fire")) %>% 
+    group_by(tip1) %>% 
+    summarise(n = n()) %>% 
+    arrange(desc(n)) %>% 
+    ggplot(aes(x = "", y = n)) +
+    geom_bar(stat = "identity", aes(fill = as.factor(tip1)), position = "stack") +
+    coord_polar("y", start=0) +
+    geom_label(aes(y = n/2.5 + c(0, cumsum(n)[-length(n)]), label = formatC(n, format="f", big.mark=",", digits=0)), size=3.5) +
+    scale_fill_manual(values = colorsRainbow) +
+    theme(axis.text = element_blank(), axis.title = element_blank()) +
+    labs(title = "Pie Chart", fill = "Pokemon Turu")
+```
+
+```{r f2}
+type<-pokemon%>%select(tip1,tip2)%>%group_by(tip1,tip2)%>%summarise(cnt=n())
+
+t1<-type%>%ggplot(aes(x=tip1,y=cnt,fill=tip1))+geom_bar(stat="identity")+coord_polar()
+t2<-type%>%ggplot(aes(x=tip2,y=cnt,fill=tip2))+geom_bar(stat="identity")+coord_polar()
+grid.arrange(t1,t2,ncol=2)
+```
+
+ Tip1 ve Tip2 icin farkli bir grafik denemek istedim ve bu goruntuyu elde ettim. Daha once cizdirdigim tip1 ve tip2 bar grafiklerinin 2 li pie grafigi gibi dusunebilriz.
+  
+
+```{r f3}
+pokemon%>%
+  select(saldiri,savunma,hiz,HP,sp_atk,sp_def,isim)%>%
+  group_by(isim)%>%
+  summarise(Ort_Attack=mean(saldiri),Ort_Def=mean(savunma),Ort_Speed=mean(hiz),Ort_Hp=mean(HP),Ort_Spl_Atk=mean(sp_atk),Ort_Spl_Def=mean(sp_atk))%>%
+  gather(Ort,value,2:7)%>%
+  filter(value>150)%>%
+  ggplot(aes(x=isim,y=value,col=Ort,group=Ort))+
+  geom_line()+
+  theme(axis.text.x = element_text(angle=90))
+```
+
+```{r 3D}
+# 3 Boyutlu tablo: HP, Atk, Def
+hp.atk.def <- pokemon[, 6:8]
+
+# kumelersek (cluster):
+cluster.3v <- kmeans(hp.atk.def, 4)
+cluster.3v$cluster <- as.factor(cluster.3v$cluster)
+
+library(scatterplot3d)
+with(pokemon, {
+  s3d <- scatterplot3d(HP, saldiri, savunma,        
+                       color=cluster.3v$cluster, pch=19,      
+                       type="h",                  
+                       main="Pokemon",
+                       xlab="HP",
+                       ylab="Saldiri",
+                       zlab="Savunma")
+  s3d.coords <- s3d$xyz.convert(HP, saldiri, savunma) # 2D yi 3D CEvirme
+  text(s3d.coords$x, s3d.coords$y,             # x ve y kordinatlari
+       labels=isim,               # metin tablosu
+       cex=.5, pos=4)           # metni %50 kucult ve noktalarin sagina yerlestir
+})
+```
+
+  __4. Regresyon Modeli__
+
+ Hangi Pokemon'un toplam gucu ile birlestiren en sıira disi ozelliklere (örneğin, hp, saldırı, savunma) sahip oldugunu gormek icin dogrusal bir regresyon modeli kuralim.
+```{r f1}
+poke <- lm(toplam ~ HP + saldiri + savunma + sp_atk + sp_def + hiz, pokemon)
+par(mfrow = c(2,2))
+plot(poke)
+```
+
+ Gozlem 1, 3 ve 6 en sira disi ozellik kombinasyonuna sahiptir.
+ 
+  __5. Korelasyon 1__
+ 
+```{r kor1}
+ggplotly(ggcorr(pokemon[,6:11], geom = "circle", nbreaks = 5,label = TRUE))
+
+```
+
+Yukaridaki grafikte, Ozel saldiri ve hizin yuksek derecede iliskili oldugunu gorebiliyoruz.
+
+  __6. Mega Pokemonlar__
+ 
+
+```{r h1}
+#Veriyi yeniliyoruz kuculterek
+new <- pokemon[1:166,]
+dim(new)
+```
+
+ Bu mega pokemonlarin ne oldugunu bilmiyorum, bu yuzden onlari filtreliyorum;
+```{r h2}
+Mega <- new %>% subset( !((isim == 'VenusaurMega Venusaur') | (isim == 'CharizardMega Charizard X') |
+                            (isim == 'CharizardMega Charizard Y') | (isim == 'BlastoiseMega Blastoise')
+                          | (isim == 'BeedrillMega Beedrill') | (isim == 'PidgeotMega Pidgeot')
+                          | (isim == 'AlakazamMega Alakazam') | (isim == 'SlowbroMega Slowbro')
+                          | (isim == 'GengarMega Gengar') | (isim == 'KangaskhanMega Kangaskhan')
+                          | (isim == 'PinsirMega Pinsir') | (isim == 'GyaradosMega Gyarados') 
+                          | (isim == 'AerodactylMega Aerodactyl') | (isim == 'MewtwoMega Mewtwo Y')
+                          | (isim == 'MewtwoMega Mewtwo X')))
+
+str(Mega)
+```
+
+
+```{r h3}
+dim(Mega)
+```
+
+```{r h4}
+#Mega pokemonlardan Cim pokemonları degiskene atayalim: grass
+grass <-  Mega %>% subset(tip1 == "Grass")
+table(grass$tip2)
+
+grass
+```
+
+```{r h5}
+plot_ly(data = grass
+        ,type = 'scatter'
+        ,mode='markers'
+        ,hoverinfo = 'text'
+        ,x = ~grass$tip2
+        ,y = ~grass$isim
+        ,color = ~grass$tip2
+        ,size= ~grass$toplam
+        ,text = ~paste('isim : ',grass$isim))%>% 
+  layout(title = "İkinci Tip Cim Pokemonu"
+         , xaxis = list(title ="Pokemon tipi")
+         , yaxis = list(title = "Pokemon isimi"))
+``` 
+
+ Bu bolumde, yanliliga neden olabildikleri ve her duruma aykiri olabilecekleri icin efsanevi ve mega evrimlesmis pokomonlar haric tutulmustur. Gozlemler birincil ture gore ortalama istatistiklere sahiptir.
+
+  __7. Korelasyon 2__
+
+```{r yeni}
+
+#Veriyi tekrar indiriyoruz.
+
+data_pokemon <- read_csv("C:/Users/gulte/Desktop/Pokemon.csv")
+
+## Sütun adlarını degistirme
+
+stat_name <- names(data_pokemon)[5:11]
+
+names(data_pokemon) <- tolower(names(data_pokemon))
+
+names(data_pokemon)[1] <- 'id'
+
+names(data_pokemon) <- gsub(' ', '_', names(data_pokemon))
+
+names(data_pokemon) <- gsub('\\.', '', names(data_pokemon))
+
+## Efsanevi sutunların degerlerini degistirme
+
+data_pokemon <- data_pokemon %>% 
+  mutate(legendary = if_else(legendary == T, 'Legendary', 'Non-Legendary'))
+
+## Mega evrimlesmis pokemon icermeyen veri kumesinin olusturulması
+
+capable_of_mega_evolution_id_list <- data_pokemon %>% 
+  filter(grepl('Mega ', name)) %>% 
+  select(id) %>% 
+  unique() %>% 
+  unlist()
+
+data_pokemon_not_mega_evolved <- data_pokemon %>% 
+  filter(id %in% capable_of_mega_evolution_id_list) %>% 
+  as.data.frame() %>% 
+  group_by(id) %>% 
+  filter(row_number() == 1) %>% 
+  bind_rows(data_pokemon %>% 
+              filter(!id %in% capable_of_mega_evolution_id_list)) %>% 
+  arrange(id) %>% 
+  ungroup()
+
+data_pokemon_not_mega_evolved <- data_pokemon_not_mega_evolved %>% 
+  mutate(capable_of_mega_evolution = if_else(id %in% capable_of_mega_evolution_id_list, T, F))
+
+## Mega evrim sutunu olusturulmasi
+
+data_pokemon <- data_pokemon %>% 
+  left_join(data_pokemon_not_mega_evolved %>% 
+              select(name, capable_of_mega_evolution))
+
+data_pokemon$capable_of_mega_evolution[is.na(data_pokemon$capable_of_mega_evolution)] <- F
+```
+
+```{r kor2}
+temp <- data_pokemon_not_mega_evolved %>% 
+  filter(legendary == 'Non-Legendary') %>% 
+  gather(key = key, value = value, total:speed) %>% 
+  group_by(type_1, key) %>% 
+  summarise(mean_value = round(mean(value), 1)) %>% 
+  mutate(key = as.factor(key)) %>% 
+  as.data.frame() %>% 
+  spread(key = key, value = mean_value) %>% 
+  select(-type_1)
+
+names(temp) <- sort(stat_name)
+
+temp <- cor(temp)
+
+temp[upper.tri(temp, diag = T)] <- 0
+
+temp <- temp %>% 
+  as.data.frame() %>% 
+  mutate(key_1 = rownames(.)) %>% 
+  gather(key = key_2, value = value, Attack:Total)
+
+temp %>% 
+  ggplot(aes(key_1, key_2, fill = value)) + 
+  geom_tile(colour = 'white') + 
+  geom_text(data = temp %>% 
+              mutate(value = if_else(value == 0, NA_real_, round(value, 2))), aes(label = value)) + 
+  scale_fill_gradient2(low = colour_list[1],  mid = 'white', high = colour_list[2], midpoint = 0, limit = c(-1, 1)) + 
+  guides(size = F) + 
+  labs(x = NULL, y = NULL, 
+       title = 'Daha Hızlı, Daha Az Savunma'
+       )
+```
+
+ Hiz ve savunma arasindaki korelasyon oldukca azdir.
+
+
+ __8. Sonuclar ve Aciklamalar__
+ 
+* Pokemonlarin %48'inin ikincil tur yoktur.
+
+* Savunma ve Ozel Savunma dagilim grafiginde  egitmen Savunma Stratejileri ariyorsa ne tur Pokemonlarin secilecegini analiz ettigimiz de Su Pokemonu en iyi Savunma Pokemonlaridir. 
+
+* Ucma durumunda, birincil tip (4) olarak ucan pokemon sayisi en azdir, ancak ikincil tip (97) olarak ucan pokemon sayisi en fazladir.
+
+* Bence her başlangic icin iyi vir avantajlari ve dezavantajlari var. Ornegin, Blastoise ve evrimleri guclu bir savunmaya sahiptir, ancak istatistiklerinin geri kalanı zayiftir.
+
+* Farkli nesiller farkli istatistiklere Oncelik vermektedir. Nesil 4, en yüksek ortalama değerlere sahiptir. 4,5 ve 6 nesillerin ortalama diger uc nesillerden daha yuksek istatistiklere sahip olduklaridir. Bunun nedeni; benim icin en goze carpan olasilik, onceki nesillere dayanan evrimlerdir. Ozellikle Gen 4, Gen 1/2/3 pokemondan gelistirilen orantisiz sayida pokemona sahip gibi gorunuyor ve bu da ortalama istatistiklerinin en uste cikmasini dogal hale getiriyor.
+
+* Ates ve Elektrik Pokemonlari daha saldiri tabanli, Su ve cim Pokemonlari ise daha iyi Savunmaya sahip ama yavaslar.
+
+_Aciklamalar:_
+
+include_graphics: knit destekli goruntu olusturma
+
+theme_bw: Beyaz arka plan ve siyah kilavuz cizgileri iceren bir tema ekleme
+
+image_read: Resim dosyasini okutma
+
+grid.raster: Resimin konumunu olusturma
+
+geom_tile: Katman ayarlama
+
+coord_flip: X ve y eksenleri icin sinirlar
+
+facet_wrap: karakter vektoru
+
+legend.position: Konumu belirler (none hicbiri oluyor.)
+
+gather: Bir dizi sutun adi toplar ve bunlari tek bir “anahtar” sutuna yerlestirir.
+
+arrange: Satirlari bir veya daha fazla degiskenle yeniden siralamak icin kullanilir.
+
+add_segments: Varolan bir cizime yatay cizgi ekler.
+
+coord_cartesian: Koordinat sistemindeki sinirlarin belirlenmesi, grafigi büyütür (buyutecle bakmak gibi)
+
+ggcorr: Korelasyon tablosu
+
+unique: yinelenen satirlar veya dizi dondurur 
+
+spread: Bu bagimsiz degiskenler ifade eder (sutun adlarini veya konumlarini ayirabilirsiniz).
+
+guides: bagimsiz degiskenlere olcek ayarlanabilir
+
+cnt: sayac islemi
+
+
+<center>
+![](https://media.giphy.com/media/10LKovKon8DENq/giphy.gif)
+</center>
+
