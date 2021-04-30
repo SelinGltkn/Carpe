@@ -1,0 +1,288 @@
+---
+title: "NBA"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+* **Kaynak**: https://www.statcrunch.com/app/index.php?dataid=1096769&groupid=958
+* **Aciklama**: Bu verisetine dahil edilmis oyuncular en az 40 maca cikmis oyunculardir.Bu verisetinde bir NBA basketbolcusunun 2013-2014 sezonu boyunca ne kadar iyi oldugunu gosteren bazi degiskenlerle calisilimistir(Bu sezonda MVP (EDO) Kevin Durant secilmistir).
+1. **Bagimli Degisken** : 
++ *PER*:Oyuncu Verimlilik Derecesi; dakika basina uretim olcusu, lig ortalamasi 15 olacak sekilde standardize edilmistir.
+2. **Aciklayici Degiskenler**:
++ *Player*: Basketbolcu isimleri
++ *Age*: 1 Subat 2014 itibari ile oyuncu kac yasindaydi ?
++ *Games*: Bir oyuncunun oynadigi mac sayisi
++ *Minutes*: Bir oyuncunun oynadigi sure sayisi
++ *TS*: Isabetli atis yuzdesi;2 sayilik,3 sayilik ve serbestatislari dikkate alan atis verimlilik olcusudur.
++ *ORB*: Ofansif ribaund yuzdesi.
++ *DRB*: Defansif ribaund yuzdesi.
++ *TRB*: Toplam ribaund yuzdesi.
++ *AST*: Oyuncunun yaptigi asist yuzdesi.
++ *STL*: Top calma yuzdesi.
++ *BLK*: Top bloklama yuzdesi.
++ *TOV*: Top kaybi yuzdesi
++ *USG*: Topa sahip olma yuzdesi
++ *ORtg*: 100 ofansif atakta atilan sayi yuzdesi
++ *DRtg*: 100 defansif atakta atilan sayi yuzdesi
++ *OWS*: Bir oyuncun atakta kazandigi top yuzdesi
++ *DWS*: Bir oyuncun defasnta kazandigi top yuzdesi
++ *WS*:Kazanma yuzdesi
+* **Gozlem Sayisi**:342
+* Aciklayici Degisken Sayisi:17
+
+
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+NBA <- read_excel("C:/Users/selin/Desktop/NBA.xlsx")
+```
+
+```{r, echo=F, message=FALSE, warning=FALSE}
+NBA$Age <- as.numeric(NBA$Age)
+NBA$Games <- as.numeric(NBA$Games)
+NBA$Minutes <- as.numeric(NBA$Minutes)
+NBA$PER <- as.numeric(NBA$PER)
+NBA$TS <- as.numeric(NBA$TS)
+NBA$ORB <- as.numeric(NBA$ORB)
+NBA$DRB <- as.numeric(NBA$DRB)
+NBA$TRB <- as.numeric(NBA$TRB)
+NBA$AST <- as.numeric(NBA$AST)
+NBA$STL <- as.numeric(NBA$STL)
+NBA$BLK <- as.numeric(NBA$BLK)
+NBA$TOV <- as.numeric(NBA$TOV)
+NBA$USG <- as.numeric(NBA$USG)
+NBA$ORtg <- as.numeric(NBA$ORtg)
+NBA$DRtg <- as.numeric(NBA$DRtg)
+NBA$OWS <- as.numeric(NBA$OWS)
+NBA$DWS <- as.numeric(NBA$DWS)
+NBA$WS <- as.numeric(NBA$WS)
+NBA <- NBA[,c(-2,-4)]
+```
+
+## Diagnostics(Tanimlama Yontemleri)
+
+### 1. Hata ile ilgili Varsayimlarin Kontrolu
+
+Burada,hatalarin bagimsiz, sabit varyansli ve normal dagilimli oldugunu kontrol edecegiz.Hatalar yani $\epsilon$ gozlenemez oldugundan artiklar yani $\hat{\epsilon}$ uzerinden varsayimlar kontrol edilir.
+
+## {.tabset .tubset-fade .tabset-pills}
+
+### Isabetli Atis Yuzdesi
+```{r, message=FALSE, warning=FALSE}
+library(plotly)
+plot_ly(data=NBA,x= ~TS, y= ~PER)
+```
+
+### Asist Yuzdesi
+```{r, message=FALSE, warning=FALSE}
+plot_ly(data=NBA,x= ~AST, y= ~PER)
+```
+
+### Topa Sahip Olma Yuzdesi
+```{r, message=FALSE, warning=FALSE}
+plot_ly(data=NBA,x= ~USG, y= ~PER)
+```
+
+### 100 Atakta(Ofansif) Atilan Sayi Yuzdesi
+```{r message=FALSE, warning=FALSE}
+plot_ly(data=NBA,x= ~ORtg, y= ~PER)
+```
+
+### Top Kaybi Yuzdesi
+```{r, message=FALSE, warning=FALSE}
+plot_ly(data=NBA,x= ~TOV, y= ~PER)
+```
+
+## {-}
+
+```{r message=FALSE, warning=FALSE}
+MODEL<- lm(PER ~ .-Player,data=NBA)
+summary(MODEL)
+```
+
+## Normallik {.tabset .tubset-fade .tabset-pills}
+
+### QQ PLOT
+```{r,message=FALSE, warning=FALSE}
+qqnorm(residuals(MODEL),ylab="residuals",main="Model QQPLOT",col="darkseagreen4",col.main="darkseagreen4",font.lab=1.5,col.lab="darkslategray",col.axis="darkslategray")
+qqline(residuals(MODEL))
+```
+
+### HISTOGRAM
+```{r,message=FALSE, warning=FALSE}
+hist(residuals(MODEL),main="Model Histogram",col = "cornsilk4",col.main="bisque4",col.lab="bisque4",col.axis="bisque4",font.lab=1.5)
+```
+
+### YOGUNLUK GRAFIGI
+```{r, message=FALSE, warning=FALSE}
+plot(density(residuals(MODEL),na.rm = T),main="Model Yogunluk Grafigi",col="darkgoldenrod4",col.main="darkgoldenrod3")
+```
+
+## {-}
+
+####Normallik Testi
+Ho:Modelin artiklari normal dagilir
+Ha:Modelin artiklari normal dagilima sahip degildir
+```{r, message=FALSE, warning=FALSE}
+library(olsrr)
+ols_test_normality(MODEL$residuals)
+```
+
+## Sabit Varyans Kontrolu {.tabset .tubset-fade .tabset-pills}
+
+### Isabetli Atis Yuzdesi
+```{r,message=FALSE, warning=FALSE}
+library(plotly)
+plot_ly(x= NBA$TS, y= ~residuals(MODEL),xlab="TS",ylab="Artiklar")
+```
+
+### Top Calma Yuzdesi
+```{r,message=FALSE, warning=FALSE}
+plot_ly(x= NBA$STL, y= ~residuals(MODEL),xlab="STL",ylab="Artiklar")
+```
+
+### Top Bloklama Yuzdesi
+```{r,message=FALSE, warning=FALSE}
+plot_ly(x= NBA$BLK, y= ~residuals(MODEL),xlab="BLK",ylab="Artiklar")
+```
+
+### Top Kaybi Yuzdesi
+```{r,message=FALSE, warning=FALSE}
+plot_ly(x= NBA$TOV, y= ~residuals(MODEL),xlab="TOV",ylab="Artiklar")
+```
+
+### Topa Sahip Olma Yuzdesi
+```{r,message=FALSE, warning=FALSE}
+plot_ly(x= NBA$USG, y= ~residuals(MODEL),xlab="USG",ylab="Artiklar")
+```
+
+### 100 Atakta(Ofansif) Atilan Sayi Yuzdesi
+```{r message=FALSE, warning=FALSE}
+#Bagimsiz olan TS,STL,BLK,TOV,USG ve ORtg de?iskenlerine karsi artiklarin grafigini cizelim.
+plot_ly(x= NBA$ORtg, y= ~residuals(MODEL),xlab="ORtg",ylab="Artiklar")
+```
+
+## {-}
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+ggplot(MODEL,aes(.fitted,.resid))+geom_point()+geom_hline(yintercept = 0)+geom_smooth(se=FALSE)+  ggtitle("Artiklar ve Tahminler")+
+  xlab("Tahminler")+ylab("Artiklar")
+
+#Grafik incelendiginde hatalarin genel olarak rastgele bir sacilim gosterdigini soyleyebiliriz.Artiklar rastgele dagildigindan otokorelasyon probleminin olmadigini ve varyansin sabit oldugunu soyleyebiliriz.Bunu kanitlayabilmek icin gerekli testleri uygulayacagiz.
+
+
+```
+
+
+## Degisen Varyanslilik Testleri
+
+### 1-Breusch-Pagan Degisen Varyanslilik Testi
+Ho: Degisen varyans problemi vardir
+Ha: Degisen varyans problemi yoktur
+```{r message=FALSE, warning=FALSE}
+yy <- residuals(MODEL)^2
+bpmodel <- lm(yy~ Age+ Games+ Minutes+TS+ORB+DRB+TRB+AST+
+                STL+BLK+TOV+USG+ORtg+DRtg+OWS+DWS+WS,data = NBA)
+summary(bpmodel)
+#p degeri 0.05 ten buyuk oldugundan (0.1171) HO hipotezi reddedilemez. Degisen varyanslilik problemi yoktur denilebilir.
+```
+
+### 2-White testi
+
+Ho: Degisen varyans problemi vardir
+
+Ha: Degisen varyans problemi yoktur
+```{r message=FALSE, warning=FALSE}
+yy <- residuals(MODEL)^2
+
+whitemodel <- update(MODEL,yy~predict(MODEL)+(predict(MODEL))^2,NBA)
+summary(whitemodel)
+#p degeri 0.05 den buyuk oldugundan(0.4548) Ho hipotezi reddedilemez. Degisen varyans problemi yoktur.
+
+```
+
+
+```{r,warning=FALSE}
+library(lmtest)
+bptest(MODEL)
+```
+
+## SIRADIŞI GÖZLEMLER ##
+
+## Leverages ##
+
+```{r,message=FALSE,warning=FALSE}
+library(faraway)
+hatv<-hatvalues(MODEL)
+NBA$Player[which(hatv>2*MODEL$rank/length(NBA$Player))]
+halfnorm(hatv,labs=NBA$Player,4,ylab="Leverages")
+#model$rank p değeri
+#2*MODEL$rank/length(NBA$Player) kat point değeri
+```
+
+## Outliers ##
+
+```{r}
+stud <- rstudent(MODEL)
+halfnorm(stud,labs=NBA$Player,5,ylab="rstudent")
+cutpoint<-abs(qt(0.05/(dim(NBA)[1]*2),(dim(NBA)[1]-MODEL$rank)))
+NBA$Player[which(stud>cutpoint)]
+```
+
+```{r,warning=FALSE,message=FALSE}
+library(car)
+outlierTest(MODEL,labels=NBA$Player)
+```
+unadjusted p-value 0.0010905 göre outliyer  Bonferroni p 0.37294 göre outlyer değil
+
+#unfluential observations
+```{r}
+cook<-cooks.distance(MODEL)
+halfnorm(cook,3,labs = NBA$Player,ylab = "cook distance")
+max(cook)
+```
+
+cutpoint elirlemek için yani nerden sonrası cook 
+```{r}
+#qf(p,df1,df2) p 0.50 df1 değişken sayısı+1 ve df2 gözlem sayısı-değişken sayısı
+qf(0.50, 18, 324)
+``` 
+0.9652082 max(cook) değerinden çok yüksek olduğu için etkili gözlem yok 
+
+
+```{r}
+dff<-dffits(MODEL)
+halfnorm(dff,3,labs = NBA$Player,ylab = "diffits")
+#labs = NBA$Player kaldırırsan kaçıncı gözlemler olduğunu görürsün
+```
+difft için cutpoint değeri 2*kök için p/n
+```{r}
+cut<-2*sqrt(18/342)
+cut
+```
+
+gerald walsı çıkartmak için kaçıncı gözlem olduğunu buldu 295 onu çıkartıp tekrar model oluşturdu
+
+```{r}
+nba<-NBA[-295,]
+```
+
+```{r}
+MODEL1<- lm(PER ~ .-Player,data=nba)
+summary(MODEL1)
+summary(MODEL)
+```
+estimateler değişti 
+
+
+
+
+
+
+
+
+
+
+
