@@ -1,10 +1,6 @@
 ---
-title: "İSTATİSTİKSEL YAZILIM FİNAL"
-author: "Melike Hilal SANCAKLI"
-        "Selin Nur GÜLTEKİN"
-        "Öykü URAL"
-        "Damla KILIÇ"
-        "Melida EKİCİ"
+title: "İSTATİSTİKSEL YAZILIM"
+author: "Selin Nur GÜLTEKİN"
 date: "01 01 2020"
 output: html_document
 ---
