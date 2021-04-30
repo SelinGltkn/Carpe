@@ -1,0 +1,93 @@
+---
+title: "Hierarchical Clustering"
+author: "Selin Nur Gültekin"
+date: "15 01 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r }
+customer <- read.csv("C:/Users/selin/Desktop/Data Mining/Unsupervised Learning/customer.csv")
+customer<-data.frame(customer)
+head(customer)
+```
+```{r}
+str(customer)
+```
+
+```{r}
+customer<-scale(customer[,-1])
+```
+
+```{r}
+hc<-hclust(dist(customer,method="euclidean"),method="ward.D2")
+hc
+```
+```{r}
+plot(hc,cex=0.7)
+```
+```{r}
+library(cluster)
+hc2<-hclust(dist(customer,method="euclidean"),method="single")
+plot(hc2,cex=0.7)
+
+```
+Alternatif olarak, agnes fonksiyonunu da kullanabiliriz. Bu fonksiyon çok benzer şekilde davranır; ancak, agnes fonksiyonu ile, bulunan kümeleme yapısının gücünü ölçen aglomeratif katsayıyı da elde edebilir (1'e yakın değerler güçlü kümeleme yapısını gösterir).
+```{r}
+hc3<-agnes(dist(customer,method="euclidean"), method = "single")
+pltree(hc3, cex = 0.6, main = "Dendrogram of agnes") 
+hc3$ac
+```
+
+Linkage methodları karşılaştırmak için aglomeratif katsayıyı aşağıdaki gibi kullanabiliriz. 
+```{r}
+library(purrr)
+m <- c( "average", "single", "complete", "ward")
+names(m) <- c( "average", "single", "complete", "ward")
+ac <- function(x) {
+  agnes(dist(customer,method="euclidean"), method = x)$ac
+}
+map_dbl(m, ac)
+```
+
+Bu, daha güçlü kümeleme yapılarını tanımlayabilen belirli hiyerarşik kümeleme yöntemlerini bulmamızı sağlar. Burada Ward yönteminin değerlendirilen dört yöntemin en güçlü kümeleme yapısını belirlediğini görüyoruz.
+
+# **Cutting Tree**
+
+Dendrograma kadar olan kesimin yüksekliği, elde edilen küme sayısını kontrol eder. K-ortalamalı kümelemede k ile aynı rolü oynar. Alt grupları (yani kümeleri) tanımlamak için, dendrogramı cutree ile kesebiliriz:
+```{r}
+sub_grp <- cutree(hc, k = 4)
+table(sub_grp)
+```
+Sonucu bir dağılım grafiğinde görselleştirmek için factoextra paketindeki fviz_cluster fonksiyonunu da kullanabiliriz.
+```{r, message=FALSE}
+library(factoextra)
+fviz_cluster(list(data = customer, cluster = sub_grp))
+```
+
+# **Optimal Küme Sayısını Belirleme**
+K-ortalamalı kümeleme ile optimum küm sayısını belirleme şeklimize benzer şekilde, hiyerarşik kümeleme için benzer yaklaşımları uygulayabiliriz:
+
+# **Elbow Method**
+```{r}
+fviz_nbclust(customer, FUN = hcut, method = "wss")
+```
+(WSS: with in sum of squares)
+
+# **Average Silhouette Method**
+
+```{r}
+fviz_nbclust(customer, FUN = hcut, method = "silhouette")
+```
+
+# **Gap Statistic Method**
+
+```{r}
+gap_stat <- clusGap(customer, FUN = hcut, nstart = 25, K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+```
+
