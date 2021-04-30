@@ -1,0 +1,292 @@
+---
+title: "Veri Madenciliği  - SVM"
+author: "Selin Nur Gultekin"
+date: "12 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Kaynak: https://www.kaggle.com/merishnasuwal/breast-cancer-prediction-dataset 
+
+Bu meme kanseri veri seti, Wisconsin Hastaneleri Üniversitesi'nden Dr. William H. Wolberg'den alınmıştır.
+
+*Değişkenler*
+
+mean_radius:  Ortalama yarıçap: Merkezden çevre üzerindeki noktalara olan mesafelerin ortlaması
+
+mean_texture: Ortalama doku: Gri skala değerlerinin standart sapması
+
+mean_perimeter: Çevre: Çekirdek tümörün ortalama boyutu
+
+mean_area: ortalama alan
+
+mean_smoothness: ortalama pürüzsüzlük : Yarıçap uzunluklarındaki yerel değişimin ortalaması
+
+*Yanıt Değikeni*
+
+diagnosis : Teşhis (0: negatif(kanser değil), 1: kanser)
+
+```{r, message=FALSE}
+library(tidyverse)
+library(neuralnet)
+library(GGally)
+library(ggplot2)
+library(caret)
+library(e1071)
+```
+
+
+```{r}
+cancer <- read.csv("C:/Users/selin/Desktop/Breast_cancer_data.csv")
+```
+
+Veri kümemizin amacı, kümeye dahil edilen tanı ölçüleriyle hastanın meme kanseri olup olmadığını teşhis amaçlı tahmin etmektir. 
+
+```{r}
+knitr::kable(head(cancer), caption = "Meme kanseri verisi")
+```
+
+Veride düzenlemeler yapmalıyım factor olarak değişkenimi değiştirip 0 ve 1 değişkenimi kanser teşhisi koyulmamış(0) olana "negatif", kanser teşhisi koyulmuş(1) olana "kanser" yazdırıyorum. Veride düzenlemeler yapmam gerekiyor. Veriyi özetleyip kontrol ediyorum.
+
+```{r}
+cancer$diagnosis <- as.factor(cancer$diagnosis)
+levels(cancer$diagnosis)<-c("negatif","kanser")
+summary(cancer)
+```
+
+Eksik gözlem var mı diye bakıcam.
+
+```{r}
+apply(cancer,2,function(x) sum(is.na(x)))
+```
+
+Eksik gözlem yok normalleştirme yapabilirim.
+
+```{r}
+maxs <- apply(cancer[ ,1:5], 2, max) 
+mins <- apply(cancer[ ,1:5], 2, min)
+
+scaled <- data.frame(as.data.frame(scale(cancer[,1:5], center = mins, scale = maxs-mins)),cancer$diagnosis)
+```
+
+Scaled datamı oluşturdum. Oluştururken yanıt değikenimi çıkarttım. Nümerik değişkenlerimle, kategorik değişkenimi birleştirmek için data.frame kullandım .
+Verinin %75'ini train, %25'ini test olarak ayırıyorum.
+
+```{r}
+set.seed(569)
+index <- sample(1:nrow(cancer),0.75*nrow(cancer))
+train <- scaled[index,] 
+test <-  scaled[-index,]
+```
+
+İkili çıktı için yanıt değişkenini düzenlemeliyim;
+
+```{r}
+nntrain<-train
+nntrain <- cbind(nntrain, train$cancer.diagnosis == 'negatif')
+nntrain <- cbind(nntrain, train$cancer.diagnosis == 'kanser')
+
+names(nntrain)[7] <- 'negatif'
+names(nntrain)[8] <- 'kanser'
+
+head(nntrain) 
+```
+
+
+
+```{r}
+set.seed(500)
+ANN <- neuralnet( negatif + kanser ~ mean_radius + mean_texture + mean_perimeter + mean_area + mean_smoothness, 
+                  data=nntrain,hidden=c(4,3),linear.output=F) 
+plot(ANN) 
+```
+
+```{r pressure, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("svm.png")
+#Goruntu html formatinda gozukmedigi icin resim olarak kaydettim.
+```
+
+2 gizli katman var birinci gizli katmanda 4 nöron ikinci gizli katmanda 3 nöron ve 2 çıktı katmanı var.
+
+
+
+*Suppoert Vector Machine*
+
+Yanıt değişkenimi factor olarak değiştirmiştim yani burda type= 'C-classification' alarak alacağım. Default olarak kernel radikal, burda linear olarak alacağım. Test setimizdeki tahminleri, yanıt değişkenini dışarda bırakarak hesaplayacağım.
+
+```{r}
+classifier1 = svm(formula= cancer.diagnosis ~ . ,
+                  data = train, scale = TRUE,
+                  type= 'C-classification',
+                  kernel= 'linear')
+```
+
+
+```{r}
+set.seed(20)
+y_pred1= predict(classifier1, newdata = test[-6])
+```
+
+İlk matrisimi oluşturursam;
+```{r}
+cm <- confusionMatrix(table(test[,6], y_pred1))
+cm
+```
+
+Accuracy : 0.9091  değerim yani doğru tahmin oranım %90. 
+
+Cross validation kullanarak tune.svm komutunu kullanacağım. İlk kernel yine linear kullanıcam bu sefer cost parametresi için cross validation yapacağım.
+
+```{r}
+set.seed(20)
+tune.out <- tune.svm(cancer.diagnosis ~ . ,
+                     data= train,
+                     kernel='linear',
+                     cost = c(0.5,1,5,10,15))
+summary(tune.out)
+```
+
+Belirlediğim cost değerlerinden en düşük cross validated hatasını veren cost= 10 değeri çıktı. Belirlediğimiz cost parametresini kullanarak SVM sınıflandırıcıyı bulalım.
+
+```{r}
+set.seed(20)
+classifier2 = svm(formula=cancer.diagnosis ~ . ,
+                  data= train,
+                  scale= TRUE,
+                  type='C-classification',
+                  cost= tune.out$best.parameters[1],
+                  kernel= 'linear')
+```
+
+Test setindeki tahminleri hesaplayalım
+
+```{r}
+set.seed(20)
+y_pred2 = predict(classifier2, newdata = test[-6])
+```
+
+Confusion Matrisini oluşturalım
+
+```{r}
+set.seed(20)
+cm <- confusionMatrix(table(test[,6], y_pred2))
+cm
+```
+
+Accuracy : 0.9231 yani doğru tahmin oranı %92. Tahmin performansımız yükseldi. 
+Şimdi radial kernel kullanarak cross validated performansına bakalım.
+
+```{r}
+set.seed(20)
+tune.out <- tune.svm(cancer.diagnosis ~ . ,
+                     data= train,
+                     kernel= 'radial',
+                     gamma= c(0,0.5,1,2,5),
+                     cost=10^seq(1,-1,by=-.1))
+summary(tune.out)
+```
+
+Kernel da radial basis kullanmam tahmin performansını düşürdü. 
+bu parametleri ve radial kernel kullanarak sınıflandırıcı kuralım.
+
+```{r}
+set.seed(20)
+classifier3 = svm(formula= cancer.diagnosis ~ . ,
+                  data= train,
+                  scale = TRUE,
+                  type= 'C-classification',
+                  kernel='radial',
+                  cost= tune.out$best.parameters[2],
+                  gamma=tune.out$best.parameters[1])
+```
+
+Performansa test verimiz üzerinde bakalım
+
+```{r}
+set.seed(20)
+y_pred3 = predict(classifier3, newdata = test[-6])
+```
+
+Confusion Matrisimiz;
+
+```{r}
+cm<- confusionMatrix(table(test[,6], y_pred3))
+cm
+```
+
+Accuracy : 0.9091 yani doğru tahmin oranı %90. Performansımız düşmüştür.
+En iyi modelin belirlenmesi için SVM cross validationla döngü oluşturalım ve ortalama accuracylerimize bakalım.
+
+```{r}
+set.seed(200)
+cv.accuracy1<- NULL 
+cv.accuracy2<- NULL 
+cv.accuracy3<- NULL 
+k<-10
+
+for(i in 1:k){
+  index<- sample(1:nrow(cancer), round(0.9*nrow(cancer)))
+  train.cv<- cancer[index,]
+  test.cv<- cancer[-index,]
+  
+  classifier1 =svm(formula= diagnosis ~ . ,
+                  data= train.cv,
+                  scale = TRUE,
+                  type= 'C-classification',
+                  kernel='linear')
+  y_pred1= predict(classifier1, newdata = test.cv[-6])
+  cv.accuracy1[i]<-confusionMatrix(table(test.cv[,6],y_pred1))$overall[1]
+  
+  classifier2 =svm(formula= diagnosis ~ . ,
+                  data= train.cv,
+                  scale = TRUE,
+                  type= 'C-classification',
+                  cost=0.5,
+                  kernel='linear')
+  y_pred2= predict(classifier2, newdata = test.cv[-6])
+  cv.accuracy2[i]<-confusionMatrix(table(test.cv[,6],y_pred2))$overall[1]
+  
+  classifier3 =svm(formula= diagnosis ~ . ,
+                  data= train.cv,
+                  scale = TRUE,
+                  type= 'C-classification',
+                  kernel='radial',
+                  cost=0.7,
+                  gamma=0.5)
+  y_pred3= predict(classifier3, newdata = test.cv[-6])
+  cv.accuracy3[i]<-confusionMatrix(table(test.cv[,6],y_pred3))$overall[1]
+                
+}
+```
+
+Ortalama accuracylerimize bakalım
+
+```{r}
+mean(cv.accuracy1)
+```
+
+```{r}
+mean(cv.accuracy2)
+```
+
+
+```{r}
+mean(cv.accuracy3)
+```
+
+1. ve 2. model daha düşük ve aynı çıktı. 3. model daha yüksek çıktı yani daha iyi diyebirliriz. 
+
+
+
+
+
+
+
+
+
+
+
+
