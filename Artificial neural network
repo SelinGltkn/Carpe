@@ -1,0 +1,455 @@
+---
+title: "Yapay Sinir Aglari İncelemesi"
+author: "Selin Nur Gultekin"
+date: "05 07 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+**Calismamizin Amaci**
+
+ Veri setimiz uzerinde yapay sinir aglari modeli kurarak, konut fiyatlarini en iyi sekilde tahmin etmeyi amacliyoruz.
+
+**Yapay Sinir Aglari Hakkinda Kucuk Bir Bilgi**
+
+ YSA, insan beyninin calisma mekanizmasini taklit ederek beynin ogrenme, hatirlama genelleme yapma yolu ile yeni bilgiler turetebilme gibi temel islevlerini gerceklestirmek uzere gelistirilen mantiksal yazilimlardir. 
+
+**Peki biz neden YSA Modeli kullaniyoruz?**
+
+ Yapay sinir aglari modellerimizin uygulama alanlarindan birin on goru ve tahmin oldugunu on sunumuzda bahsetmistik. Geleneksel algoritma ve modellerden daha hizli ve guvenilir sonuclar verdigi icin yapay sinir aglarini kullanacagiz.
+ Yapay sinir aglari ileri ve geri besleme olarak 2 kisimdan olusuyor. Biz yaptigimiz inceleme de ileri besleme yapay sinir aglarini kullandik. Cunku tek yonlu bilgi akisi soz konusu, girdi tabakasindan alinan bilgiler gizli katmana iletilir, gizli ve cikti tabakalari bilginin islenmesi ile cikis degeri belirlenir.
+
+**YAPAY SİNİR AGLARİNİ İNCELERKEN NELER YAPACAGİZ ?**
+
+1.Kullanilacak Olan KUtUphaneleri İndirme ve Yukleme (Install & Load Use Library)
+
+2.Hakkinda, İndirme ve Yukleme (Loading the dataset)
+
+3.Dataseti Ozetleme (Summarizing the dataset)
+
+4.Dataseti Gorsellestirme (Visualizing the dataset)
+
+5.Dataseti Normallestirme (Normalization of Data)
+
+6.Model Kurma ve Tahmin (Making Model & Predictions)
+
+7.Degerlendirme (Conclusion)
+
+
+**Kullanacağımız Kutuphaneler**
+
+```{r message=FALSE, warning=FALSE}
+
+library(tidyverse) #Veri setimizin yapisi hakkida duzenlemeler yapmak icin kullanilir.
+library(reshape2) #Veri setimizde yeniden sekillendirmeler icin kullanilir.
+library(dplyr) #Tidyverse gibi veri setimizi duzenleyip islemek icin kullaniyoruz. 
+library(readr) #Veri setimizi okumak icin kullaniyoruz.
+library(ggplot2) #Veri setimiz ile ilgili gorsellestirme yaparken kullaniyoruz.
+library(neuralnet) #Yapay sinir aglari uygulamasi yaparken kullaniyoruz.
+
+```
+
+**Veri Setimizi Okutalim**
+
+```{r warning=FALSE}
+housing = read.csv('C:/Users/gulte/Desktop/housing.csv')
+```
+
+Oncelikle veri setimizin formunu görelim;
+
+```{r}
+head(housing)
+```
+
+Veri Setimiz 20640 gozlemden olusmakta, 10 farkli degiskenimiz var.
+
+Veri setimizin temel istatistiksel ozelliklerini gormek istersek;
+
+Bu kisimda veri setimizin kategorik olup olmadigini da gorebiliriz.
+
+```{r}
+summary(housing)
+```
+
+Elde ettigimiz ozet bilgilere gore neler yapmamiz gerektigini belirtelim;
+
++Total_bedrooms (Toplam yatakodasi sayisi) icindeki NA'larin degerlerini ele alinması gerekir. Bunlara bir deger atamasi yapilmali
+
++Ocean_proximity'i ikili sutunlara boleriz. Cunku R'deki cogu makine ogrenimi algoritmasi, kategorileri tek bir sutunda isleyebilir, bunu onlemek amaci ile ikiye böldük.
+
++Belirli bir gruptaki evlerin buyuk olasilikla daha dogru kesiti oldugundan total_bedrooms ve total_rooms degerlerini mean_bedrooms ve mean_rooms sutunlarina donusturmeliyiz.
+
+Degiskenlerimizin isimlerini gormek istersek;
+
+```{r}
+colnames(housing)
+```
+
+Degiskenlerimizi gorsellestirme yaparak gozden gecirelim;
+
+
+```{r warning=FALSE}
+ggplot(data = melt(housing), mapping = aes(x = value)) + 
+    geom_histogram(bins = 30) + facet_wrap(~variable, scales = 'free_x')
+```
+
+Elde ettiğimiz grafiklere gore;
+
++Korfez bolgesinde kesinlikle 500.000'den fazla degere sahip evler var.
+
++Uygulayacagimiz yontemler icin verilerin olcegini standartlastirmaliyiz.
+
++Degiskenlerin bazilari 0-10 arasinda, digerleri 500.000'e kadar cikiyor.
+Konut fiyatlari uzerindeki tavanin tahminimizi nasil etkileyebilecegini dusunmemiz gerekiyor. Sinirli degerleri kaldirmaya ve sadece emin oldugumuz degerler ile calismaliyiz.
+
+**Veri Setimizi Duzenleme **
+
+Veri setimizde oldukca eksik deger var oncelikle bunlari temizlemeliyiz.
+
+Eksik degerleri olan tek sutun olan total_bedrooms icin medyanı doldurabiliriz. Medyan ortalama yerine kullanılır cunku aykiri degerlerden daha az etkilenir. 
+
+
+```{r}
+#Eksik gozlem degerlerizi bulmak icin is.na fonksiyonunu kullaniyoruz.
+housing$total_bedrooms[is.na(housing$total_bedrooms)] =
+#Na.rm=True yaparak eksik gozlem degerlerimizi kaldiriyoruz.
+median(housing$total_bedrooms , na.rm = TRUE)
+```
+
+Sutunları tekrar duzenleyelim;
+
+```{r}
+#Ortalama oda sayisi ve ortalama yatak odasi sayisini bulduk. Bu bize modelimizde oda sayisinin bir onemi var mi diye gozlem yapmamizi saglayabilir.
+housing$mean_bedrooms = housing$total_bedrooms/housing$households #(Toplam yatak odasını hane sayısına böldük)
+housing$mean_rooms = housing$total_rooms/housing$households
+#İki yeni degiskenimizi tekrar degiskene atiyoruz
+drops = c('total_bedrooms', 'total_rooms')
+#Veri setimizden drops degerlerini cikarip ortalama olarak hesapladigimiz degerleri koyduk.
+housing = housing[ , !(names(housing) %in% drops)]
+```
+
+Duzenlemeden sonra tekrar veri setimizi gormek istersek;
+
+```{r}
+#Head fonksiyonu bize ilk bes gozlemi verir. Yeni degikenlerimizin oldugu veri setini gormek istersek;
+head(housing)
+```
+
+#Kategorilerimizi donusturelim.
+
+
+'Ocean_proximity' sutununda tum kategorilerin bir listesini alip her kategorinin kendi sutunu oldugu tum 0'larin bos bir veri olusturalim.
+Veri setimizin uygun sutunlarini doldurmak icin bir for dongusu kullanalim.
+
+
+```{r warning=FALSE}
+categories = unique(housing$ocean_proximity)
+#kategorileri ayiralim.
+cat_housing = data.frame(ocean_proximity = housing$ocean_proximity)
+```
+
+
+```{r warning=FALSE}
+#Döngü yardimi ile tum degiskenlerimize sifir degeri atadik.
+for(cat in categories){
+    cat_housing[,cat] = rep(0, times= nrow(cat_housing))
+}
+head(cat_housing) #yeni sutunlara bakalim
+```
+
+
+
+```{r warning=FALSE}
+#Near bay degiskenimize 1 atamasi yaptik
+for(i in 1:length(cat_housing$ocean_proximity)){
+    cat = as.character(cat_housing$ocean_proximity[i])
+    cat_housing[,cat][i] = 1
+}
+
+head(cat_housing)
+```
+
+
+
+```{r}
+cat_columns = names(cat_housing)
+keep_columns = cat_columns[cat_columns != 'ocean_proximity']
+cat_housing = select(cat_housing,one_of(keep_columns))
+
+tail(cat_housing)
+```
+
+**Sayisal degiskenlerimizi olceklendirelim **
+
+Burada, 'median_house_value' haric sayisal degerlerin her birini olceklendirdigimizden (tahmin etmek icin kullanacagimiz kisim burasi).
+X degerlerini, katsayilara esit agirlik verilecek sekilde olceklendirdik, ancak y degeri olcegi, ogrenme algoritmalarini ayni sekilde etki etmicek (ve sonunda tahminleri yeniden olceklendirmemiz gerekir).
+
+
+```{r warning=FALSE}
+#Degisken isimlerini görelim
+colnames(housing)
+```
+
+
+```{r warning=FALSE}
+#okyanus yakinligini bir drops'a atadik.
+drops = c('ocean_proximity')
+#Bu dropsu veri setimizden cikardik.
+housing_num =  housing[ , !(names(housing) %in% drops)]
+```
+
+
+```{r}
+#Degisilikler yaptigimiz veri setimizin ilk bes degiskenini gorelim.
+head(housing_num)
+```
+
+
+**Veri Setimizi Normallestirelim (Normalization of Data)**
+
+Degiskenlerin ortalama ve varyanslari birbirinden onemli olcude farkli oldugu takdirde ortalama ve varyansi buyuk olan degiskenlerin diger degiskenler uzerinde etkisi fazla olacagindan digerlerinin etkisini azaltacaktir.
+Bu neden ile bir data uzerinde normallestirme (standartlaştirma) bu problemin onune gececektir.
+
+
+En cok kullanilan normallestirmeler:
+
++Min-Max Normallestirmesi 
+
++Z-Score Normallestirmesi’dir. 
+
+Bu çalısmada Min-Max Normallestirmesi kullanarak veri setimiz uzerinden standartlastirma yapacagiz.
+
+Min-Max normallestirmesi degerleri 0-1 aralıga donusturecektir.
+
+X* = (Xi – XMİN) / (XMAX – XMİN)
+
++X*: Dunusturulmus degerleri,
+
++Xi: Gozlem degerlerini,
+
++XMİN: En kucuk gozlem degerini,
+
++XMAX: En buyuk gozlem degerini belirtir.
+
+Normallestirme islemi yapabilmemiz icin oldukca kullanisli olan apply() ve turevleri olan fonksiyonu kullanacagiz. 
+
+Veriseti icerisinde satir bazinda veya sutun bazinda bilgiler elde etmek istedigimizde kullandigimiz fonksiyonlardir. Ornek verecek olusak; her satir/her sutun icin min, max, mean, range vb. descriptive degerleri ile ozel tanimlanan fonksiyonlari kullanarak bu fonksiyon icerisinde degerleri elde edilebiliriz. Birbirine cok benzeyen bu 3 fonksiyonun kullanimi oldukca basittir. Aralarindaki fark ciktilarinin veri tiplerinin farkli olmasindan gelir.
+
++apply(): Matris icerisinde satir ve sutun bazinda islemler yapmamizi saglar.
+
++sapply ve lappy(): Vektor ve Listeler tipleriyle calisirlar.(sapply() ‘ın ciktisi vektor, lapply() ‘in ciktisi liste’dir.)
+
+
+```{r}
+apply(housing_num, 2, mean) # Veri setimiz icerisindeki sutunlara ait ortalama degerlerini verir.
+```
+
+
+```{r}
+apply(housing_num, 2, range) # Veri setimiz icerisindeki sutunlara ait range(aralik) degerlerini verir.
+```
+
+Çalışmaya dönecek olursak;
+
+```{r}
+MaxValue <- apply(housing_num, 2, max) #Veri setimiz icerisindeki sutunlara ait max degerlerini verir.
+MaxValue
+```
+
+
+
+```{r}
+MinValue <- apply(housing_num, 2, min) # Veri setimiz icerisindeki sutunlara ait min degerlerini verir.
+MinValue
+```
+
+
+```{r}
+DataSetN <- as.data.frame(scale(housing_num, center = MinValue, scale = MaxValue-MinValue ))
+#DataSet verisini Min-Max Normallestirmesi uyguluyoruz.
+```
+
+**Model Kurma ve Tahmin (Making Model & Predictions)**
+
+Bu calismada Supervised (ogreticili/danışmali/egiticili) bir model (Neural Network) kullanacagimiz icin once dataseti Train ve Test olarak iki ayri parcaya ayirmamiz gerekiyor. 
+Burada Train verisi icin 400 gozlem, Test verisi icin 106 gozlem rastgele alinarak olusturulacaktir.
+
+```{r}
+ind <- sample(1:nrow(housing_num),400) # 1 ile 506 gozlem icerisinden rastgele 400 gozlem secilir.
+
+TrainDF <- DataSetN[ind,] #Train datasi icin veri setimiz icerisindeki rastgele 400 gozlem secilir.
+TestDF  <- DataSetN[-ind,] #Test datasi icin veri setimiz icerisindeki rastgele 106 gozlem secilir.
+
+```
+
+Veri setimiz icerisinde 7 adet degiskenimiz bulunmaktadir.
+Burada bagimsiz degiskenler ile bagimli degiskeni tahmin etmeye calisiyoruz. 
+
+```{r}
+AllVars <- colnames(housing_num)
+
+PredictVars <- AllVars[!AllVars%in%"median_house_value"]
+#PredictVars icerisinde yer alan bagimli "median_house_value" olan degiskeni cikariyoruz.
+
+PredictVars
+
+
+PredictVars <- paste(PredictVars, collapse = "+")
+#Bagimsiz degiskenler ile Bagimli degiskenleri tahmin edecegimiz uzere modeli formule ediyoruz.
+
+PredictVars
+
+ModelFormula <-as.formula(paste("median_house_value~", PredictVars, collapse = "+"))
+ModelFormula
+```
+
+
+NeuralNetwork modelimini kurmadan once hatirlamamiz gereken temel bilesenler var. Bunlarin belirlenmesi modelin basarisinda oldukca belirleyici oldugunu hatirlatmakta fayda var.
+
+**Yapay Sinir Ağlarının Temel Bileşenleri**
+
+1. Mimari Yapı
+2. Öğrenme Algoritması
+3. Aktivasyon Fonksiyonu
+
+Modeli olusturuyoruz ve grafiksel olarak cizdiriyoruz:
+
+```{r}
+#Yapay sinir aglari icin kullanilan bir kutuphane
+library(neuralnet)
+NNModel <- neuralnet(formula=ModelFormula, hidden=c(4,2), linear.output=T, data=TrainDF)
+#Neural Network Modelini GirdiKatmanı, GizliKatman1, GizliKatman2 ve CiktiKatmani olarak olusturuyoruz.
+
+plot(NNModel) #Neural Network Modelini cizdiriyoruz.
+```
+
+```{r pressure, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("ysa.png")
+
+#Goruntu html formatinda gozukmedigi icin resim olarak kaydettim. Sebebin Error: yazan kismi oldugunu ama neden oldugunu anlayamadik ve bulamadik.
+```
+
+
+İleri Beslemeli YSA modelimize gore; 
+
++Mimari Yapı: Girdi, 1.GizliKatman, 2.GizliKatman ve Cikti katmani olmak uzere 4 katmandan olusmaktadir. 
+1. Gizli Katmanda 4 noron, 2. Gizli Katmanda 2 noron bulunmaktadir.
+
++Ogrenme Algoritmasi: (Geri Yayilim Algoritmasi) İleri beslemeli sinir aglar icin denetimli ogrenme
+Ogrenme Algoritmasi en iyi degerinin bulunmasi olarak tanimlayabiliriz.
+
++Aktivasyon Fonksiyonu: Girdi ve cikti birimleri arasinda eslesmeyi sagliyor.
+
+```{r}
+PredictValues <- compute(NNModel, TestDF) #NNModel ile TestDF veri seti
+
+PredictValues <- PredictValues$net.result #Deger tahmini etmek icin atama yapiyoruz.
+
+ActualValues <- (TestDF$median_income) #Gercek degerleri gormek icin
+
+Result <- data.frame(Actual=ActualValues, Predict=PredictValues, Diff=ActualValues-PredictValues)
+
+head(Result)
+```
+
+
+```{r}
+tail(Result)
+```
+
+Result verisinde Actual yani TestDF degerleri (20240 Gozlem), Predict yani Neural Network Modeli kurularak elde edilen degerler, ve Actual-Predict arasindaki fark olan Diffrence kolonundan olusmaktadir. Burada head ve tail ile ilk 6 satir karsilastirilmasi gozukmektedir.
+
+```{r}
+ColMean <- apply(Result, 2, mean) #Actual, Predic ve Diff degiskenlerine ait ortalamalar
+
+ColMean
+```
+
+Actual ile Predict kolonlarina ait ortalama degerlerinin (0.232 – 0.402) birbirine yakin oldugu gorulmustur. Simdi Hata Kareleri Ortalamasi (MSE) degerlerini hesaplayıp gorelim.
+
+```{r}
+MSE <- sum((PredictValues - ActualValues)^2)/nrow(TestDF) #Hata Kareleri Ortalamasi
+
+MSE
+```
+
+MSE degeri 0.05 oldugu gorulmustur. Bir baska mimariye sahip Neural Network modeli ile ya da Regresyon gibi baska bir model ile karsilastirarak model tercihinde bulunabilir. Son olarak gorsellestirmemizi yapalim.
+
+```{r}
+plot(ActualValues, PredictValues, col='blue', 
+main='Actual vs Predicted', pch=1, cex=0.9, type = "p", xlab ="Frequency", ylab="Actual")
+abline(0,1,col="black")
+```
+
+Son kisim olarak, Orjinden gecen cizgiye bitisik bir sekilde degerlerin yer aldigi goruluyor.
+
+
+**Degerlendirme**
+
+İncelememiz de California Housing veri seti uzerinde Neural Network modeli kurularak fiyat tahmininde bulunduk. Veri setimiz icerisinde 7 bagimsiz degisken(feature) ile model kurularak 1 bagimli(median_income) degisken ile tahminimizi yaptik. Neural Network mimari yapisinda; 
+
++Girdi Katmaninda 7 noron, 
+
++1. Gizli Katmanda 4, 
+
++2. Gizli Katmanda 2 
+
++Cikti Katmaninda 1 noron bulunmak uzere 7x4x2x1 modeli kurulmustur. Modelin Mean Square Error (MSE) degerinin 0.005 oldugu gorulmustur.
+
+
+**Kaynakcalar**
+
+```{r}
+#Tidyverse 
+citation("tidyverse")
+```
+
+```{r warning=FALSE}
+#Dplyr
+citation("dplyr")
+```
+
+```{r warning=FALSE}
+#Reshape2
+citation("reshape2")
+```
+
+```{r warning=FALSE}
+#Readr
+citation("readr")
+```
+
+```{r warning=FALSE}
+#Neuralnet
+citation("neuralnet")
+
+```
+
+```{r warning=FALSE}
+#Ggplot2
+citation("ggplot2")
+```
+
++ https://en.wikipedia.org/wiki/Backpropagation: Bu sitede ileri beslemeli sinir aglarinda kullanilan geri yayilim algoritmasi hakkinda bilgi aldik.
+
++https://rstudio-pubs-static.s3.amazonaws.com/341320_a4aea4aa0f6c47f2b7242e0bee322683.html :Ornekleri inceledik.
+
++http://www.acarindex.com/dosyalar/makale/acarindex-1423867613.pdf
+
++https://www.veribilimiokulu.com/yapay-sinir-aglari/
+
++http://veribilimci.org/tag/yapay-sinir-aglari/
+
++https://www.youtube.com/watch?v=NkUY-VBQfTo 
+
++http://mesutpiskin.com/blog/yapay-sinir-agi-derin-ogrenme.html
+
++https://www.derinogrenme.com/2017/03/04/yapay-sinir-aglari/
+
++https://bilimfili.com/dunyayi-degistirmekte-olan-yapay-sinir-aglari-nedir
+
++https://veribilimcisi.com/2017/08/13/yapay-sinir-aglari/
