@@ -1,0 +1,664 @@
+---
+title: "Veri Madenciliği"
+author: "Selin Nur Gültekin"
+date: "25 01 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r kütüphane, message=FALSE, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(tree)
+library(randomForest)  
+library(gbm)            
+library(InformationValue)
+library(caret)
+library(ROCR)
+library(car) 
+library(tidyverse)
+library(skimr)      # skimming data frames
+library(ggthemes)
+library(patchwork)  # combine separate ggplots into the same graphic
+library(corrplot)
+library(rsample)    # initial_split()
+library(DescTools)  # PseudoR2()
+library(sjPlot)     # tab_model(), print regression models as HTML table
+library(rpart)      # Recursive Partitioning and Regression Trees
+library(rpart.plot)
+library(ranger)     # Random forest
+library(cowplot)
+palette_ro = c("#ee2f35", "#fa7211", "#fbd600", "#75c731", "#1fb86e", "#0488cf", "#7b44ab")
+```
+
+
+# Soru 1
+
+ **Veri Giriş Bölümü**
+
+Verimin kaynagi: https://www.kaggle.com/andrewmvd/heart-failure-clinical-data
+
+Ek kaynak : https://bmcmedinformdecismak.biomedcentral.com/articles/10.1186/s12911-020-1023-5#Sec2
+
+```{r veri, message=FALSE, echo=FALSE}
+df = read.csv('C:/Users/selin/Desktop/heart.csv')
+```
+
+ **Verim Hakkinda bilgi:**
+
+Veri setinde yer alan 12 özelliğe dayanarak kalp yetmezliğine bağlı ölüm oranlarını tahmin edeceğiz.
+Bu, hastanelerin kardiyovasküler hastalıkları olan hastaların şiddetini değerlendirmesine yardımcı olmak için kullanılabilir.
+Kardiyovasküler hastalıklar (KVH), dünya çapında 1 numaralı ölüm nedenidir ve her yıl tahmini 17,9 milyon kişinin hayatını almaktadır ve bu, dünya çapındaki tüm ölümlerin% 31'ini oluşturmaktadır .
+
+
+Değişken                | Açıklama                                          | Aralık
+------------------------|-------------------------------------------------  | --------------------
+age                     |Hastanın yaşı                                      | [40,...,95]
+anaemia                 |Kırmızı kan hücrelerinde veya hemoglobinde azalma  | (0,1)
+creatinine_phosphokinase|Kreatinin fosfokinaz kandaki CPK enziminin seviyesi| [23,...,7861]
+diabetes                |Diyabet hastanın şeker hastalığı varsa             | (0,1)
+ejection_fraction       |Ejeksiyon fraksiyonu / ayrılan kan yüzdesi         | [14,...,80]
+high_blood_pressure     |Yüksek tansiyon hastada hipertansiyon varsa        | (0,1)
+platelets               |Kandaki trombositler                               | [25.01,...,850.00]
+serum_creatinine        |Serum kreatinin kandaki kreatinin seviyesi         | [0.50,...,9.40]
+serum_sodium            |Serum sodyum kandaki sodyum seviyesi               | [114,...,148]
+sex                     |Cinsiyet / kadın=0                                 | (0,1)
+smoking                 |Hasta sigara içiyorsa                              | (0,1)
+time                    |Takip süresi                                       | [4,...,285]
+DEATH_EVENT             |Ölüm olayı (hedef) / ölen hastalar = 1             | (0,1)
+*Bağımlı değişkenimiz "DEATH_EVENT" dir.*                                                        
+
+
+```{r , message=FALSE, echo=FALSE}
+head(df, 50) %>% 
+  DT::datatable()
+```
+
+```{r, message=FALSE, echo=FALSE}
+skim(df)
+```
+```{r , message=FALSE, echo=FALSE}
+f_features = c("anaemia", "diabetes", "high_blood_pressure", "sex", "smoking", "DEATH_EVENT")
+
+df_n <- df
+df <- df %>%
+  mutate_at(f_features, as.factor)
+```
+
+Veri setimizde eksik gözlem yoktu ve gerekli düzenlemeler yapılmıştır.
+
+**Veri ön işleme**
+
+`İnitial_split ()` işlevi, tren setini ve test setini bölmek için kullanılır.
+Veri kümesini, hedef değişkenin oranını korurken, "DEATH_EVENT" öğesini "strata" bağımsız değişkeni olarak belirterek bölebilirsiniz.
+Tüm çekirdek değerleri 0'da sabitlenmiştir.
+
+```{r}
+set.seed(0)
+df_split <- initial_split(df, p = 0.8, strata = DEATH_EVENT)
+train <- training(df_split)
+test <- testing(df_split)
+head(train)
+
+set.seed(0)
+df_n_split <- initial_split(df_n, p = 0.8, strata = DEATH_EVENT)
+train_n <- training(df_n_split)
+test_n <- testing(df_n_split)
+head(train_n)
+```
+
+
+## Lojistik regresyon analizi
+Lojistik regresyon analizi, bir olayın meydana gelme olasılığını tahmin etmek ve analiz etmek için kullanılan bir modeldir (bu durumda, 'DEATH_EVENT == 1`)
+Maksimum olabilirlik yöntemini kullanarak parametreleri (kesişme ve regresyon katsayıları) tahmin ederek,
+oranlardaki değişikliği hesaplamak mümkündür (olayın gerçekleşme olasılığının olayın gerçekleşmeme olasılığına oranı)
+açıklayıcı değişkenlerin değerleri değiştiğinde. 
+
+Lojistik regresyon analizinde, belirleme katsayısı (artıkların karelerinin toplamına dayanan) bir değerlendirme kriteri olarak kullanılamaz.Çünkü parametreler, en küçük kareler yöntemi (artıkların karelerinin toplamını en aza indiren) yerine maksimum olabilirlik yöntemi kullanılarak tahmin edilmektedir.
+Bu nedenle, McFadden'ın olasılığa dayalı sözde belirleme katsayısını hesaplıyoruz.
+
+```{r}
+lr1 <- glm(DEATH_EVENT ~ .,
+           family=binomial(logit), data=train)
+tab_model(lr1, show.r2 = FALSE, transform = NULL,
+          digits = 3, digits.p = 4)
+PseudoR2(lr1)
+```
+
+Burada "p", anlamlılık olasılığını temsil eder.
+Parametrenin "p" değeri ne kadar düşükse, o kadar anlamlıdır ve değer 0,05'ten büyükse, anlamlı olarak değerlendirilmez.
+Bu modelde istatistiksel olarak anlamlı olmayan birçok değişken olduğunu görebiliriz. 
+Bu nedenle, değişken seçimi için aşamalı yöntemi kullanacağız.
+
+Aşamalı yöntemde, açıklayıcı değişkenlerin seçimi değiştirilirken model birçok kez yeniden oluşturulur.
+Daha küçük AIC (Akaike Information Criterion; modelin basitliği ile modelin uyum iyiliği arasındaki dengenin bir ölçüsü) değerine sahip model daha iyi model olarak bırakılmıştır. 
+
+```{r}
+lr2 <- step(lr1)
+
+tab_model(lr2, show.r2 = FALSE, transform = NULL,
+          digits = 3, digits.p = 4)
+PseudoR2(lr2)
+```
+
+McFadden'in sözde belirleme katsayısını kontrol edersek, aşamalı yöntemi uygulamadan öncesine göre neredeyse hiç azalmadığını görebiliriz.
+
+Şimdi, modelden oranları hesaplayalım.
+Tahmini parametrelerden ("Log-Odds") elde edilebilir.
+Örneğin, "serum_creatinine" değeri 1 artarsa, "DEATH_EVENT == 1" (ölü) olasılığı e ^ 0.676 ^ = yaklaşık 1.966 kat olur. 
+
+```{r}
+odds <- c(round( exp(lr2$coefficients["age"]*10), digits=3 ),
+          round( exp(lr2$coefficients["ejection_fraction"]), digits=3 ),
+          round( exp(lr2$coefficients["serum_creatinine"]), digits=3 ),
+          round( exp(lr2$coefficients["serum_sodium"]), digits=3 ),
+          round( exp(lr2$coefficients["time"]*7), digits=3 ))
+
+
+data.frame(variables = names(odds), odds = odds) %>%
+  mutate(description = c("Odds ratio of death for age 10 years older",
+                         "Odds ratio of death if ejection fraction id 1% higher",
+                         "Odds ratio of death if serum creatinine level is 1 mg/dL higher",
+                         "Odds ratio of death if serum sodium level is 1 mg/dL higher",
+                         "Odds ratio of death with 1 week (7 days) longer follow-up time"))
+```
+Bu modeli test verilerini tahmin etmek için kullanacağız. 
+
+```{r}
+pred <- as.factor(predict(lr2, newdata=test, type="response") >= 0.5) %>%
+  fct_recode("0" = "FALSE", "1" = "TRUE")
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+
+acc_lr <- confusionMatrix(pred, test$DEATH_EVENT)$overall["Accuracy"]
+tpr_lr <- confusionMatrix(pred, test$DEATH_EVENT)$byClass["Specificity"]
+# Bu modelin geri çağrılmasını "Specificity" olarak ayarlamamızın nedeni, confusionMatrix () işlevindeki pozitifin varsayılan değerinin 0 olmasıdır.
+```
+
+Bu test verilerini kullanan tahmin, doğruluğun %81,36 ve hatırlamanın ("Sensitivity") %68,42 olduğunu gösterdi. 
+
+## Karar ağacı
+
+Birkaç tür karar ağacı algoritması vardır.
+Burada, ikili bir ağaç oluşturmak için bir segmenti her zaman ikiye bölen CART (Sınıflandırma ve Regresyon Ağaçları) kullanacağız.
+Öyleyse bir karar ağacı oluşturmaya çalışalım ve bu modelle bir tahmin yapmaya çalışalım. 
+
+```{r }
+set.seed(0)
+cart <- rpart(DEATH_EVENT ~ .,
+              data = train, method = "class",
+              control=rpart.control(minsplit=10,
+                                    minbucket=5,
+                                    maxdepth=10,
+                                    cp=0.03))
+```
+
+```{r out.width="90%", fig.height=8, , message=FALSE, echo=FALSE}
+prp(cart,
+    type = 4,
+    extra = 101,
+    nn = TRUE,
+    tweak = 1.0,
+    space = 0.1,
+    shadow.col = "grey",
+    col = "black",
+    split.col = palette_ro[5],
+    branch.col = palette_ro[4],
+    fallen.leaves = FALSE,
+    roundint = FALSE,
+    box.col = c(palette_ro[2], palette_ro[7])[cart$frame$yval])
+```
+
+```{r}
+pred <- as.factor(predict(cart, newdata=test)[, 2] >= 0.5) %>%
+  fct_recode("0" = "FALSE", "1" = "TRUE")
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+```
+
+Bu karar ağacına baktığımızda dallanma kararında "trombositler" ve "yüksek kan basıncı" gibi yüksek p değerlerine sahip özelliklerin kullanıldığını görürüz.
+Açıklayıcı değişkenleri yalnızca istatistiksel olarak anlamlı olanlara daraltalım ve karar ağacını yeniden oluşturalım.
+
+## Budanmış karar ağacı
+
+```{r}
+set.seed(0)
+cart <- rpart(DEATH_EVENT ~ age + ejection_fraction + serum_creatinine + serum_sodium + time,
+              data = train, method = "class",
+              control=rpart.control(minsplit=20,
+                                    minbucket=10,
+                                    maxdepth=10,
+                                    cp=0.03))
+```
+
+```{r, message=FALSE, echo=FALSE}
+prp(cart,
+    type = 4,
+    extra = 101,
+    nn = TRUE,
+    tweak = 1.0,
+    space = 0.1,
+    shadow.col = "grey",
+    col = "black",
+    split.col = palette_ro[5],
+    branch.col = palette_ro[4],
+    fallen.leaves = FALSE,
+    roundint = FALSE,
+    box.col = c(palette_ro[2], palette_ro[7])[cart$frame$yval])
+```
+
+```{r}
+pred <- as.factor(predict(cart, newdata=test)[, 2] >= 0.5) %>%
+  fct_recode("0" = "FALSE", "1" = "TRUE")
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+
+acc_cart <- confusionMatrix(pred, test$DEATH_EVENT)$overall["Accuracy"]
+tpr_cart <- confusionMatrix(pred, test$DEATH_EVENT)$byClass["Specificity"]
+```
+
+Böylesine basit bir modelle, doğruluğu %91,53'e ve geri çağırmayı %84,21'e çıkarabildik.
+Bununla birlikte, şekil, takip süresi ("süresi") 74 günden az olan tüm hastaların ölü olarak kabul edildiğini göstermektedir ki bu pratik açıdan kullanımı zor görünmektedir.
+Referans için, burada açıklayıcı değişken olarak "zaman" içermeyen bir karar ağacı var.
+
+```{r}
+set.seed(0)
+cart <- rpart(DEATH_EVENT ~ age + ejection_fraction + serum_creatinine + serum_sodium,
+              data = train, method = "class",
+              control=rpart.control(minsplit=10,
+                                    minbucket=5,
+                                    maxdepth=10,
+                                    cp=0.01))
+```
+
+```{r out.width="90%", fig.height=8, message=FALSE, echo=FALSE}
+prp(cart,
+    type = 4,
+    extra = 101,
+    nn = TRUE,
+    tweak = 1.0,
+    space = 0.1,
+    shadow.col = "grey",
+    col = "black",
+    split.col = palette_ro[5],
+    branch.col = palette_ro[4],
+    fallen.leaves = FALSE,
+    roundint = FALSE,
+    box.col = c(palette_ro[2], palette_ro[7])[cart$frame$yval])
+```
+
+```{r}
+pred <- as.factor(predict(cart, newdata=test)[, 2] >= 0.5) %>%
+  fct_recode("0" = "FALSE", "1" = "TRUE")
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+```
+
+Model biraz karmaşık olsa da %76,27 doğrulukla model oluşturmayı başardık. 
+
+## Random forest
+Random forest, test verilerini örnekleyen ve çıkaran, her örnek için paralel olarak karar ağaçları oluşturan ve bu karar ağaçlarının ortalamasına veya çoğunluğuna göre tahminlerde bulunan bir modeldir.
+Daha önce olduğu gibi, modeli eğitip tahminlerde bulunacağız. 
+```{r}
+set.seed(0)
+rf <- ranger(DEATH_EVENT ~.,
+             data = train,
+             mtry = 2, num.trees = 500, write.forest=TRUE, importance = "permutation")
+```
+
+```{r out.width="90%", message=FALSE, echo=FALSE}
+data.frame(variables = names(importance(rf, method = "janitza")),
+           feature_importance = importance(rf, method = "janitza")) %>%
+  ggplot(aes(x = feature_importance,
+             y = reorder(variables, X = feature_importance))) +
+    geom_bar(stat = "identity",
+             fill = palette_ro[6],
+             alpha=0.9) +
+    labs(y = "features", title = "Rastgele ormanın önemi düzeyi") +
+    theme_minimal(base_size = 12)
+```
+
+```{r}
+pred <- predict(rf, data=test)$predictions
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+
+acc_rf <- confusionMatrix(pred, test$DEATH_EVENT)$overall["Accuracy"]
+tpr_rf <- confusionMatrix(pred, test$DEATH_EVENT)$byClass["Specificity"]
+```
+
+Bu şekilde, yüksek doğruluk ve yüksek geri çağırma elde etmeyi başardık.
+Referans olarak, karar ağacındaki ile aynı yüksek derecede önemli açıklayıcı değişkenleri kullanarak, ancak "time" olmadan bir model oluşturacağız. 
+
+```{r}
+set.seed(0)
+rf <- ranger(DEATH_EVENT ~ age + ejection_fraction + serum_creatinine,
+             data = train,
+             mtry = 3, num.trees = 100, write.forest=TRUE, importance = "permutation")
+```
+
+```{r out.width="90%", message=FALSE, echo=FALSE}
+data.frame(variables = names(importance(rf, method = "janitza")),
+           feature_importance = importance(rf, method = "janitza")) %>%
+  ggplot(aes(x = feature_importance,
+             y = reorder(variables, X = feature_importance))) +
+    geom_bar(stat = "identity",
+             fill = palette_ro[6],
+             alpha=0.9) +
+    labs(x ="Önemlilik düzeyi", y = "Değişkenler", title = "Random forest önemlilik") +
+    theme_minimal(base_size = 12)
+```
+
+```{r}
+pred <- predict(rf, data=test)$predictions
+confusionMatrix(pred, test$DEATH_EVENT, positive = "1")
+```
+
+Karar ağacından daha iyi tahmin doğruluğuna sahip bir model oluşturmayı başardık.
+
+# Soru 2
+
+Veri kaynağı : https://www.kaggle.com/tolgahancepel/toyota-corolla/notebooks?datasetId=286921&language=R
+
+**Verim Hakkinda bilgi:**
+
+Değişken      | Açıklama                                          
+--------------|------------------------------------------- 
+Age           | Yıl cinsinden yaş                                    
+KM            | Kilometre
+FuelType      | Yakıt tipi (Petrol, Diesel, CNG)
+HP            | Beygir Gücü            
+MetColor      | Metalik Renkli Mi? (Yes=1, No=0)        
+Automatic     | Otomatik mi? ( (Yes=1, No=0)     
+CC            | Santimetre küp cinsinden Silindir Hacmi                          
+Doors         | Kapı sayısı     
+Weight        | Ağırlık          
+Price         | Fiyatı                            
+           
+*Bağımlı değişkenimiz "Price" dir.*                                                        
+
+```{r veri2, message=FALSE, echo=FALSE}
+Toyota = read.csv('C:/Users/selin/Desktop/ToyotaCorolla.csv')
+Toyota$FuelType <- as.factor(Toyota$FuelType)
+Toyota$MetColor <- as.factor(Toyota$MetColor)
+Toyota$FuelType <- as.factor(Toyota$FuelType)
+Toyota$Automatic <- as.factor(Toyota$Automatic)
+Toyota$Doors <- as.factor(Toyota$Doors)
+Toyota$Age <- as.numeric(Toyota$Age)
+summary(Toyota)
+```
+
+```{r, message=FALSE, echo=FALSE}
+apply(Toyota,2,function(x)sum(is.na(x))) 
+```
+
+Eksik gözlem yoktur, gerekli dönüşümler yapıldı.
+
+## Regression Tree
+
+Şimdi modeli kuralım;
+```{r}
+set.seed(100)
+train1 = sample(1:nrow(Toyota),150)
+tree.Toyota=tree(Price~., Toyota, subset=train1)
+summary(tree.Toyota)
+plot(tree.Toyota)
+text(tree.Toyota, pretty = 0)
+```
+
+Budamamız gerekip gerekmediğine karar verelim.
+
+```{r}
+cv.Toyota=cv.tree(tree.Toyota,method="deviance")
+plot(cv.Toyota$size,cv.Toyota$dev,type='b')
+```
+
+Cross validation sonucu gördük ki bu ağaçta budama yapmamıza gerek yok.
+
+```{r}
+yhat=predict(tree.Toyota,newdata=Toyota[-train1,])
+Toyota.test=Toyota[-train1,"Price"]
+plot(yhat,Toyota.test)
+abline(0,1)
+```
+
+Bu saçılım grafiğinden anlaşılacağı gibi 7 node herbirindeki gözlemler için ortak bir yanıt vardır.
+
+```{r}
+mean((yhat-Toyota.test)^2)
+```
+
+MSE değeri 2910798 bulunmuştur.
+
+## Bagging and Random Forrests
+
+```{r}
+set.seed(0)
+bag.Toyota = randomForest(Price~.,data=Toyota,subset=train1,mtry=13,importance=TRUE)
+bag.Toyota
+```
+
+Kurulan modelin Mean of squared residuals: 1895777 dir.
+
+```{r}
+yhat.bag = predict(bag.Toyota,newdata=Toyota[-train1,])
+plot(yhat.bag, Toyota.test)
+abline(0,1)
+mean((yhat.bag-Toyota.test)^2)
+```
+
+Grafikten genel olarak değerler çizginin üstündedir. MSE si 2158975 bulunmuştur. Toplam varyansın 79.55 sini açıklamaktadır.
+
+```{r}
+plot(bag.Toyota)
+```
+Default olarak 500 demiştik fakat görüldüğü gibi 100 bootstrap sample bile yeterlidir. MSE değeri 100 den sonra çokda büyük değişiklikler göstermemiştir.
+
+```{r}
+head(bag.Toyota$mse,100)
+bag.Toyota=randomForest(Price~.,data=Toyota,subset=train1,mtry=13,ntree=100)
+yhat.bag = predict(bag.Toyota,newdata=Toyota[-train1,])
+
+mean((yhat.bag-Toyota.test)^2)
+```
+
+100 ağaçla 2202667 sonucu elde ettik. Şimdi mtry=4 alarak randomforest yapalım.
+
+```{r}
+set.seed(0)
+rf.Toyota=randomForest(Price~.,data=Toyota,subset=train1,mtry=4,importance=TRUE)
+yhat.rf = predict(rf.Toyota,newdata=Toyota[-train1,])
+mean((yhat.rf-Toyota.test)^2)
+```
+
+2015354 MSE değeri düşmüştür. Şimdi farklı mtray değerleri için outof bag mse değerleri ile test verisi mse değerlerini karşılaştıralım.
+
+```{r, message=FALSE}
+oob.err<-double(13)
+test.err<-double(13)
+
+for(mtry in 1:13) 
+{
+  rf=randomForest(Price ~ . , data = Toyota , subset = train1,mtry=mtry,ntree=500) 
+  oob.err[mtry] = rf$mse[500] 
+  
+  pred<-predict(rf,Toyota[-train1,])
+  test.err[mtry]= with(Toyota[-train1,], mean( (Price - pred)^2)) 
+  
+  cat(mtry," ")
+}
+```
+
+```{r}
+matplot(1:mtry , cbind(oob.err,test.err), pch=19 , col=c("#ee2f35", "#7b44ab"),type="b",ylab="Mean Squared Error",
+        xlab="Her Bölmede Değerlendirilen Tahmin Edici Sayısı")
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("#ee2f35", "#7b44ab"))
+```
+
+4 en düşük değer yani daha uygun gözüküyor.
+
+```{r}
+test.err[4]
+```
+
+MSE  2076111 olarak bulduk.
+
+## Boosting
+
+```{r}
+set.seed(0)
+boost.Toyota=gbm(Price~.,data=Toyota[train1,],distribution="gaussian",n.trees=5000,interaction.depth=4)
+summary(boost.Toyota)
+```
+
+En yüksek değeri age değişkeni almış. Modeli test edersek;
+
+```{r}
+yhat.boost=predict(boost.Toyota,newdata=Toyota[-train1,],n.trees=5000)
+mean((yhat.boost-Toyota.test)^2)
+```
+
+MSE = 2863910
+
+# Soru 3
+
+Veri Kaynağı: https://github.com/SteffiPeTaffy/machineLearningAZ/tree/master/Machine%20Learning%20A-Z%20Template%20Folder/Part%204%20-%20Clustering/Section%2024%20-%20K-Means%20Clustering
+
+Değişken      | Açıklama                                          
+--------------|------------------------------------------- 
+CustomerID    | Müşteriye atanan benzersiz kimlik                                    
+Gender        | Müşterinin cinsiyeti
+Age           | Müşterinin yaşı
+AnnualIncome  | Yıllık Geliri          
+SpendingScore | Alışveriş merkezi tarafından müşteri davranışına ve harcama niteliğine göre belirlenen puan 
+
+```{r veri3, message=FALSE, echo=FALSE}
+mall_customers <- read.csv("C:/Users/selin/Desktop/Mall_Customers.csv")
+```
+
+
+```{r, message=FALSE, echo=FALSE}
+mall_customers <- rename(mall_customers,c('SpendingScore'='Spending.Score..1.100.'))
+mall_customers <- rename(mall_customers,c('AnnualIncome'='Annual.Income..k..'))
+```
+
+```{r}
+head(mall_customers)
+```
+
+
+```{r}
+sum(is.na(mall_customers))
+```
+Eksik gözlem yok.
+
+**Veriyi Modellemeye Hazırlama**
+
+```{r}
+# müşteri verileri başına
+mall_customers_cont <- mall_customers[,c(1,3:5)]
+
+mall_customers_cont <- mall_customers_cont %>% 
+  distinct(CustomerID,.keep_all = TRUE)
+
+head(mall_customers_cont)
+```
+
+```{r}
+# rank 
+mall_customers_cont <- mall_customers_cont %>%
+  mutate(Age = rank(Age),AnnualIncome = rank(AnnualIncome),
+         SpendingScore=rank(SpendingScore))
+
+head(mall_customers_cont)
+```
+
+```{r}
+# standartlaştırma
+mall_customers_norm <- mall_customers_cont %>%
+mutate_at(c(2:4),funs(c(scale(.))))
+
+head(mall_customers_norm)
+```
+
+```{r}
+summary(mall_customers_norm)
+sapply(mall_customers_norm[,-1],sd)
+```
+
+Rank ve standartlaşma uygulayıp veriyi uygun forma getirdik.
+
+```{r}
+final_data <- column_to_rownames(mall_customers_norm, var = "CustomerID")
+head(final_data)
+```
+
+## K-Means Clustring
+
+```{r}
+k_4 <- final_data
+```
+
+```{r}
+set.seed(1)
+cluster_4 <- kmeans(k_4, 4)
+```
+
+```{r}
+# final_data'ya küme etiketleri eklersek
+k_4$cluster <- cluster_4$cluster
+head(k_4)
+print(cluster_4$cluster)
+```
+
+
+```{r}
+#Kümeleme için yalnızca Gelir ve puan sütun ekleme
+new.mall = mall_customers %>%
+  select(AnnualIncome, SpendingScore)
+
+names(new.mall)
+```
+
+```{r include=FALSE}
+# ------ Kümeler oluşturun ------
+# Öklid yönteminde mesafeyi hesaplama
+dst = dist(new.mall, method = 'euclidean')
+dst
+```
+
+## Hierarchical kümeleme 
+
+```{r}
+# Dst'ye Hiyerarşik işlevi çalıştırma
+hc = hclust(dst, method = "ward.D2")
+plot(hc) 
+```
+
+```{r}
+#Hc'den kümeyi içe aktaralım ve ana veri kümesine atayalım
+mall_customers$cluster = as.factor(cutree(hc, k = 5))
+```
+
+
+```{r}
+#Harcama puanlarına ve Yıllık gelire göre kümelerin dağılımı için puan çizelgesi
+p = ggplot(mall_customers, aes(AnnualIncome,SpendingScore, shape = cluster, color = cluster))
+p +   geom_point(size = 2.5) +labs(title = 'Müşteri Kümeleri') + theme(text = element_text(size = 14))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
