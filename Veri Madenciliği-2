@@ -1,0 +1,185 @@
+---
+title: "Veri Madenciliği - Sürekli"
+author: "Selin Nur Gultekin-121516031"
+date: "12 12 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Kaynak: https://archive.ics.uci.edu/ml/datasets/Concrete+Compressive+Strength
+
+*Somut Basınç Dayanımı Veri Kümesi*
+
+**Değişkenler**
+
+Cement = Çimento (bileşen 1) - kantitatif - m3 karışımda kg - Giriş Değişken
+
+Blast Furnace Slag = Yüksek Fırın Cürufu (bileşen 2) - kantitatif - m3 karışımda kg - Giriş Değişken
+
+Fly Ash = Uçucu Kül (bileşen 3) - kantitatif - m3 karışımında kg - Giriş Değişken
+
+Water =  Su (bileşen 4) - kantitatif - m3 karışımında kg - Giriş Değişken
+
+Superplasticizer = Süperakışkanlaştırıcı (bileşen 5) - kantitatif - m3 karışımında kg - Giriş Değişkeni
+
+Coarse Aggregate = İri Agrega (bileşen 6) - kantitatif - m3 karışımda kg - Giriş Değişken
+
+Fine Aggregate = İnce Agrega (bileşen 7) - kantitatif - m3 karışımda kg - Giriş Değişken
+
+Age = Yaş - kantitatif - Gün (1 ~ 365) - Girdi Değişken
+
+*Concrete compressive strength = Beton basınç dayanımı - kantitatif - MPa - Çıktı Değişkeni
+
+
+```{r message=FALSE}
+set.seed(1000)
+library(dplyr)
+library(readr) #Veri setini okumak icin kullaniyorum.
+library(neuralnet) #Yapay sinir aglari uygulamasi yaparken kullaniyorum.
+data = read.csv('C:/Users/selin/Desktop/Concrete.csv')
+```
+
+```{r}
+knitr::kable(head(data), caption = "Concrete dataset")
+```
+
+
+```{r}
+summary(data)
+```
+
+
+Datada missing gozlemler var mi onu kontrol ediyorum.
+
+```{r}
+apply(data,2,function(x) sum(is.na(x)))
+```
+
+Her bir sutunun eksik degeri sifir yani eksik gozlem yok. Scaled datasını oluşturabilirim.
+
+```{r}
+maxs <- apply(data, 2, max) #sutunlarin maksimum degerini verdim.
+mins <- apply(data, 2, min) #sutunlarin minimum degerlerini verdim.
+
+scaled <- as.data.frame(scale(data, center = mins, scale = maxs - mins))
+head(scaled)
+```
+
+
+```{r}
+index <- sample(1:nrow(data),round(0.75*nrow(data)))
+train_ <- scaled[index,] #%75 lik kismini train olarak ayirdim. 772 gözlem var
+test_ <- scaled[-index,] #258 gözlem var
+```
+
+
+```{r}
+n <- names(train_) 
+f <- as.formula(paste("Concrete.compressive.strength ~", paste(n[!n %in% "Concrete.compressive.strength"], collapse = " + "))) 
+nn <- neuralnet(f,data=train_,hidden=c(6,3),linear.output=T)
+```
+
+ hidden=c(6,3) 2 tane gizli katman var 1. katmanda 6 noron ve 2.katmanda 3 noron var. 
+
+```{r}
+plot(nn)
+pr.nn <- compute(nn,test_[,1:8]) #Concrete.compressive.strength disindakileri modele soktum.
+```
+
+
+```{r pressure, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("ysa.png")
+#Goruntu html formatinda gozukmedigi icin resim olarak kaydettim.
+```
+
+
+
+
+```{r}
+pr.nn_ <- pr.nn$net.result*(max(data$Concrete.compressive.strength)-min(data$Concrete.compressive.strength))+min(data$Concrete.compressive.strength) #geri dondurdum. min-max ile carpip min ekledim.
+pr.nn_ #Orijinal tahminlerim oldu
+```
+
+
+```{r}
+MSE.nn <- sum((data[-index,]$Concrete.compressive.strength - pr.nn_)^2)/nrow(test_) 
+MSE.nn
+```
+
+
+```{r}
+plot(data[-index,]$Concrete.compressive.strength,pr.nn_,col='blue',main='Real vs predicted NN',pch=18,cex=0.7)
+abline(0,1,lwd=2)
+#test verisinin gercek degerleri(x ekseni) ve ANN uzerinden tahmin edilen degerleri(y ekseni).
+```
+
+İlk başta set.seed(1000) ve hidden=c(6,3) olarak almıştım. Şimdi onları değiştirerek tekrar deniyorum.
+
+```{r}
+set.seed(500)
+nn <- neuralnet(f,data=train_,hidden=c(4,3),linear.output=T)
+pr.nn <- compute(nn,test_[,1:8])
+pr.nn <- pr.nn$net.result*(max(data$Concrete.compressive.strength)-min(data$Concrete.compressive.strength))+min(data$Concrete.compressive.strength)
+MSE.nn <- sum((data[-index,]$Concrete.compressive.strength - pr.nn)^2)/nrow(test_) 
+MSE.nn
+```
+
+Cross validation yapıcam. 
+
+```{r}
+set.seed(500)
+cv.error1 <- NULL
+cv.error2 <- NULL
+k <- 10
+
+for(i in 1:k){
+    index <- sample(1:nrow(scaled),round(0.9*nrow(scaled)))
+    train.cv <- scaled[index,]
+    test.cv <- scaled[-index,]
+    
+    nn1 <- neuralnet(f,data=train.cv,hidden=c(6,3),linear.output=T)
+    nn2 <- neuralnet(f,data=train.cv,hidden=c(4,3),linear.output=T)
+    
+    pr.nn1 <- compute(nn1,test.cv[,1:8])
+    pr.nn1 <- pr.nn1$net.result*(max(data$Concrete.compressive.strength)-min(data$Concrete.compressive.strength))+min(data$Concrete.compressive.strength)
+    
+    pr.nn2 <- compute(nn2,test.cv[,1:8])
+    pr.nn2 <- pr.nn2$net.result*(max(data$Concrete.compressive.strength)-min(data$Concrete.compressive.strength))+min(data$Concrete.compressive.strength)
+    
+    test.cv.r <- data[-index,]$Concrete.compressive.strength
+    
+    cv.error1[i] <- sum((test.cv.r - pr.nn1)^2)/nrow(test.cv)
+    cv.error2[i] <- sum((test.cv.r - pr.nn2)^2)/nrow(test.cv)
+    
+}
+```
+
+```{r}
+mean(cv.error1)
+```
+
+```{r}
+mean(cv.error2)
+```
+
+
+```{r}
+cv.error1
+```
+
+```{r}
+cv.error2
+```
+
+```{r}
+boxplot(cv.error1,cv.error2, names=c("cv.error1","cv.error2"),main="CV error (MSE) for NN",horizontal=FALSE)
+```
+
+Cross validationda 1. model daha düşük çıktı yani ikinci modele göre daha iyi olduğunu söyleyebilirim.
+
+
+
+
