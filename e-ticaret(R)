@@ -1,0 +1,191 @@
+---
+title: "E-ticaret Projesi"
+author: "Selin Nur Gültekin-121516031"
+date: "10 07 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+e_ticaret <- read_csv("C:/Users/selin/Desktop/e-ticaret.csv")
+#
+#
+View(e_ticaret)
+```
+
+
+
+```{r}
+e_ticaret$cinsiyet<- as.factor(e_ticaret$cinsiyet)
+e_ticaret$yas<- as.factor(e_ticaret$yas)
+e_ticaret$egitim<- as.factor(e_ticaret$egitim)
+e_ticaret$p_o_frequency<- as.factor(e_ticaret$p_o_frequency)
+e_ticaret$p_s_frequency<- as.factor(e_ticaret$p_s_frequency)
+e_ticaret$p_o_harcama<- as.factor(e_ticaret$p_o_harcama)
+e_ticaret$p_s_harcama<- as.factor(e_ticaret$p_s_harcama)
+e_ticaret$tercih<- as.factor(e_ticaret$tercih)
+e_ticaret$secim1<- as.factor(e_ticaret$secim1)
+e_ticaret$secim2<- as.factor(e_ticaret$secim2)
+e_ticaret$diger<- as.factor(e_ticaret$diger)
+e_ticaret$Urun_grubu<- as.factor(e_ticaret$Urun_grubu)
+e_ticaret$odeme_kanali<- as.factor(e_ticaret$odeme_kanali)
+e_ticaret$guven<- as.factor(e_ticaret$guven)
+e_ticaret$tavsiye<- as.factor(e_ticaret$tavsiye)
+e_ticaret$Urun_memnuniyeti<- as.factor(e_ticaret$Urun_memnuniyeti)
+e_ticaret$yorum<- as.factor(e_ticaret$yorum)
+summary(e_ticaret)
+```
+
+
+```{r}
+ggplot(data = e_ticaret) + 
+  geom_bar(mapping = aes(x = secim1, fill = secim1))
+```
+
+```{r}
+ggplot(data = e_ticaret) + 
+  geom_bar(mapping = aes(x = secim2, fill = secim2))
+```
+
+
+
+```{r}
+m_e_ticaret<- data.matrix(e_ticaret)
+
+m_e_ticaret<-as.data.frame(m_e_ticaret)
+table(m_e_ticaret$secim1)
+
+amazon<-sum(m_e_ticaret$secim1==1)
+
+diger<-sum(m_e_ticaret$secim1==2)
+
+getir<- sum(m_e_ticaret$secim1==3)
+
+gittigidiyor<-sum(m_e_ticaret$secim1==4)
+
+hepsiburada<-sum(m_e_ticaret$secim1==5)
+
+migrossanalmarket<-sum(m_e_ticaret$secim1==6)
+
+n11<-sum(m_e_ticaret$secim1==7)
+
+sahibinden<-sum(m_e_ticaret$secim1==8)
+
+trendyol<-sum(m_e_ticaret$secim1==9)
+
+yemeksepeti<-sum(m_e_ticaret$secim1==10)
+
+
+secim<-c(amazon,diger,getir,gittigidiyor,hepsiburada,migrossanalmarket,n11,sahibinden,trendyol,yemeksepeti)
+secim
+
+degiskenler<-c("amazon","diger","getir","gittigidiyor","hepsiburada","migrossanalmarket","n11","sahibinden","trendyol","yemeksepeti")
+
+data<-data.frame(secim, degiskenler)
+data
+
+```
+
+
+```{r}
+ggplot(data=data,aes(x=degiskenler,y=secim)) + geom_bar(stat="identity",fill="#CC3333")+
+  geom_text(aes(label = secim/sum(secim)*100), vjust = -0.8, size = 3) 
+```
+
+
+```{r}
+table(m_e_ticaret$secim2)
+
+amazon<-sum(m_e_ticaret$secim2==1)
+
+diger<-sum(m_e_ticaret$secim2==2)
+
+getir<- sum(m_e_ticaret$secim2==3)
+
+gittigidiyor<-sum(m_e_ticaret$secim2==4)
+
+hepsiburada<-sum(m_e_ticaret$secim2==5)
+
+migrossanalmarket<-sum(m_e_ticaret$secim2==6)
+
+n11<-sum(m_e_ticaret$secim2==7)
+
+sahibinden<-sum(m_e_ticaret$secim2==8)
+
+trendyol<-sum(m_e_ticaret$secim2==9)
+
+yemeksepeti<-sum(m_e_ticaret$secim2==10)
+
+
+secim3<-c(amazon,diger,getir,gittigidiyor,hepsiburada,migrossanalmarket,n11,sahibinden,trendyol,yemeksepeti)
+secim3
+
+degiskenler1<-c("amazon","diger","getir","gittigidiyor","hepsiburada","migrossanalmarket","n11","sahibinden","trendyol","yemeksepeti")
+
+data<-data.frame(secim3, degiskenler)
+data
+
+```
+
+
+```{r}
+ggplot(data=data,aes(x=degiskenler1,y=secim3)) + geom_bar(stat="identity",fill="#003366")+
+  geom_text(aes(label = secim3/sum(secim3)*100), vjust = -0.8, size = 3) 
+```
+
+
+```{r}
+f <- cbind(secim1,secim2)~1
+m0 <- poLCA(f,data = m_e_ticaret,nclass = 1 , graphs = TRUE ,na.rm = TRUE)
+m1 <- poLCA(f,data = m_e_ticaret,nclass = 2 , graphs = TRUE ,na.rm = TRUE)
+m2 <- poLCA(f,data = m_e_ticaret , nclass = 3 , graphs = TRUE ,na.rm = TRUE)
+```
+
+
+```{r}
+f1 <- cbind(p_o_frequency,p_s_frequency)~1
+m3 <- poLCA(f1,data = m_e_ticaret,nclass = 2 , graphs = TRUE ,na.rm = TRUE)
+m4 <- poLCA(f1,data = m_e_ticaret , nclass = 3 , graphs = TRUE ,na.rm = TRUE)
+```
+
+
+```{r}
+f2 <- cbind(p_o_harcama,p_s_harcama)~1
+m5 <- poLCA(f2,data = m_e_ticaret,nclass = 2 , graphs = TRUE ,na.rm = TRUE)
+m6 <- poLCA(f2,data = m_e_ticaret , nclass = 3 , graphs = TRUE ,na.rm = TRUE)
+```
+
+
+```{r}
+m1$probs
+m2$probs
+m3$probs
+m4$probs
+m5$probs
+m6$probs
+```
+
+
+```{r}
+f <- cbind(cinsiyet,yas,egitim,p_o_frequency,p_s_frequency,p_o_harcama,p_s_harcama,tercih,secim1,secim2,Urun_grubu,odeme_kanali,guven,tavsiye,Urun_memnuniyeti,yorum)~1
+m0 <- poLCA(f,data = m_e_ticaret,nclass = 1 , graphs = TRUE ,na.rm = TRUE)
+m1 <- poLCA(f,data = m_e_ticaret,nclass = 2 , graphs = TRUE ,na.rm = TRUE)
+m2 <- poLCA(f,data = m_e_ticaret , nclass = 3 , graphs = TRUE ,na.rm = TRUE)
+```
+
+
+```{r}
+m0$probs
+m1$probs
+m2$probs
+```
